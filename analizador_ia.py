@@ -1,8 +1,14 @@
 # analizador_ia.py
 
+import os
 import sys
 import json
+from flask import Flask, request, jsonify
 import google.generativeai as genai
+
+# 1. CREAR LA APLICACIÓN FLASK
+# Esta es la variable 'app' que Gunicorn busca.
+app = Flask(__name__)
 
 # ==============================================================================
 # FUNCIÓN 1: FORMATEO DE DATOS (REEMPLAZA la conexión a la BD)
@@ -101,32 +107,28 @@ def analyze_results_with_llm(report, api_key):
     except Exception as e:
         return f"Error al generar contenido con la IA: {e}"
 
-# ==============================================================================
-# BLOQUE PRINCIPAL DE EJECUCIÓN
-# ==============================================================================
-def main():
-    """Flujo principal que orquesta todo el proceso."""
+# 2. CREAR UNA RUTA (ENDPOINT) PARA RECIBIR SOLICITUDES
+@app.route('/analizar', methods=['POST'])
+def analizar_endpoint():
+    # Obtener los datos JSON que envía el script PHP
+    form_data = request.get_json()
+    if not form_data:
+        return jsonify({"error": "No se recibieron datos en formato JSON"}), 400
 
-    # Lee el JSON que se le pasa como primer argumento desde la línea de comandos
-    try:
-        form_data = json.loads(sys.argv[1])
-    except (IndexError, json.JSONDecodeError):
-        print("Error: No se proporcionaron datos válidos en formato JSON.")
-        sys.exit(1)
+    # Leer la API Key desde las variables de entorno de Render (más seguro)
+    api_key = os.environ.get('GOOGLE_API_KEY')
+    if not api_key:
+        return jsonify({"error": "La variable de entorno GOOGLE_API_KEY no está configurada en el servidor"}), 500
 
-    # --- ¡CONFIGURAR AQUÍ! ---
-    # Es más seguro leer la API key desde una variable de entorno en un entorno de producción
-    GOOGLE_API_KEY = "AIzaSyDqsYubkpT4Q_CofYluhK6lqmQHJui_U9A"  
-    # -------------------------
-
-    # 1. Formatear el informe a partir de los datos del formulario
+    # Formatear el informe a partir de los datos del formulario
     patient_report = format_report_from_json(form_data)
 
-    # 2. Enviar a la IA para análisis
-    ai_analysis = analyze_results_with_llm(patient_report, GOOGLE_API_KEY)
+    # Enviar a la IA para análisis
+    ai_analysis = analyze_results_with_llm(patient_report, api_key)
 
-    # 3. Imprimir el resultado para que PHP lo capture
-    print(ai_analysis)
+    # Devolver la respuesta como JSON
+    # Puedes mejorar cómo se extraen los diagnósticos del texto si lo necesitas
+    return jsonify({"diagnostico_completo": ai_analysis})
 
-if __name__ == '__main__':
-    main()
+
+# Punto de entrada para Gunicorn (no se necesita el if __name__ == '__main__')
