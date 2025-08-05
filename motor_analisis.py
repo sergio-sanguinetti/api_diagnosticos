@@ -252,7 +252,7 @@ class PDF(FPDF):
         self.ln()
 
 def generate_pdf_report(token, medico, deepseek, gemini, comparacion):
-    """Genera el informe completo en formato PDF."""
+    """Genera el PDF directamente en memoria y devuelve los bytes."""
     pdf = PDF()
     pdf.add_font('DejaVu', '', 'DejaVuSans.ttf', uni=True)
 
@@ -304,9 +304,7 @@ def generate_pdf_report(token, medico, deepseek, gemini, comparacion):
     pdf.chapter_body(comparacion)
 
     # Guardar el PDF
-    file_name = f"informe_comparativo_{token}.pdf"
-    pdf.output(file_name)
-    return file_name
+    return pdf.output()
 
 # ==============================================================================
 # BLOQUE PRINCIPAL DE EJECUCIÓN

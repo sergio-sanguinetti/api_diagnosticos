@@ -1,8 +1,15 @@
-# analizador_ia.py (Versión unificada)
+# ==============================================================================
+# API FLASK PARA ANÁLISIS DE DIAGNÓSTICOS MÉDICOS V2
+#
+# Descripción:
+# API con dos funcionalidades principales:
+# 1. /analizar: Recibe datos de formulario y devuelve un análisis de IA.
+# 2. /generar-reporte-comparativo: Recibe un token, consulta la BD,
+#    compara análisis de IAs y devuelve un reporte PDF directamente.
+# ==============================================================================
 
 import os
-import json
-from flask import Flask, request, jsonify, send_from_directory
+from flask import Flask, request, jsonify, Response
 from flask_cors import CORS
 import google.generativeai as genai
 
@@ -13,9 +20,6 @@ import motor_analisis
 # ==================================
 app = Flask(__name__)
 CORS(app) # Habilita CORS para permitir peticiones desde tu frontend/PHP
-
-# Configura el directorio para los PDFs (usado por la nueva función)
-PDF_DIRECTORY = os.path.join(os.getcwd(), 'generated_reports')
 
 
 # ==============================================================================
@@ -54,98 +58,35 @@ def format_report_from_json(data):
 {resultados_str}"""
     return report
 
-# ==============================================================================
-
-# FUNCIÓN 2: ANÁLISIS CON EL MODELO DE LENGUAJE (LLM) - Sin cambios
-
-# ==============================================================================
-
 def analyze_results_with_llm(report, api_key):
-
     """Envía el informe a la API de Google Gemini para su análisis."""
-
     try:
-
         genai.configure(api_key=api_key)
-
         model = genai.GenerativeModel('gemini-1.5-flash')
-
     except Exception as e:
-
         return f"Error configurando la API de Google: {e}"
 
-
-
     prompt = f"""
-
     **Rol:** Eres un asistente médico experto en medicina ocupacional.
-
-
-
     **Tarea:** Analiza el siguiente informe de resultados de un examen médico. Tu objetivo es identificar hallazgos anormales, correlacionarlos y proponer posibles diagnósticos diferenciales, junto con recomendaciones. NO inventes valores ni información; básate únicamente en los datos proporcionados.
-
-
-
     **Informe para analizar:**
-
     {report}
-
-
-
     **Formato de Respuesta Requerido (usa Markdown):**
-
-
-
     ### Resumen General del Paciente
-
     (Describe en 1-2 frases el estado general del paciente basado en los resultados).
-
-
-
     ### Hallazgos Clave
-
-    (Usa una lista con viñetas para enumerar todos los resultados marcados como 'anormal' o que estén claramente fuera de rangos normales. Ej: - Triglicéridos: 280 mg/dL (Resultado: anormal)).
-
-
-
+    (Usa una lista con viñetas para enumerar todos los resultados marcados como 'anormal' o que estén claramente fuera de rangos normales).
     ### Análisis y Correlación Diagnóstica
-
-    (Explica qué podrían significar los hallazgos anormales en conjunto. Correlaciona los datos entre sí, por ejemplo, cómo el IMC puede influir en el perfil lipídico).
-
-
-
+    (Explica qué podrían significar los hallazgos anormales en conjunto).
     ### Análisis por Examen y Posibles Diagnósticos
-
-    (Para cada examen con un hallazgo anormal de la sección "Hallazgos Clave", crea una subsección. Dentro de cada subsección, explica qué significa el resultado anormal y qué posibles diagnósticos sugiere. Asocia claramente cada diagnóstico al resultado del examen correspondiente. Por ejemplo:
-
-    **- Perfil Lipídico (Colesterol y Triglicéridos):**
-
-      - El colesterol total y los triglicéridos elevados sugieren un posible diagnóstico de **Dislipidemia** o **Hipertrigliceridemia**. Esto aumenta el riesgo cardiovascular.
-
-    **- Índice de Masa Corporal (IMC):**
-
-      - Un IMC de 28.5 indica **Sobrepeso**, lo que puede contribuir a la dislipidemia y la hipertensión.
-
-    )
-
-
-
+    (Para cada examen con un hallazgo anormal, explica qué significa y qué diagnósticos sugiere).
     ### Recomendaciones Sugeridas
-
-    (Sugiere los siguientes pasos, como consultar a un especialista, cambios en el estilo de vida o pruebas de seguimiento, basándote en el análisis anterior).
-
+    (Sugiere los siguientes pasos, como consultar a un especialista o cambios en el estilo de vida).
     """
-
-
-
     try:
-
         response = model.generate_content(prompt)
-
         return response.text
-
     except Exception as e:
-
         return f"Error al generar contenido con la IA: {e}"
 
 
@@ -161,32 +102,28 @@ def analizar_endpoint():
         return jsonify({"error": "La variable de entorno GOOGLE_API_KEY no está configurada"}), 500
 
     patient_report = format_report_from_json(form_data)
-    # Usamos la función original que solo llama a Gemini
     ai_analysis = analyze_results_with_llm(patient_report, api_key) 
     return jsonify({"diagnostico_completo": ai_analysis})
 
 
 # ==============================================================================
 # --- NUEVA SECCIÓN PARA REPORTES COMPARATIVOS ---
-# Funcionalidad para generar un reporte completo desde la BD usando un token.
 # ==============================================================================
 
 @app.route('/generar-reporte-comparativo', methods=['POST'])
 def generar_reporte_endpoint():
-    """NUEVO ENDPOINT: Genera el reporte comparativo y PDF desde la BD."""
-    if not request.is_json:
-        return jsonify({"error": "La petición debe ser de tipo JSON"}), 400
-
+    """NUEVO ENDPOINT: Genera el reporte y lo devuelve directamente como descarga."""
+    
     data = request.get_json()
-    token = data.get('token', None)
-
-    if not token:
-        return jsonify({"error": "No se proporcionó el 'token' en el cuerpo de la petición"}), 400
-
+    if not data or 'token' not in data:
+        return jsonify({"error": "Petición inválida. Se requiere un 'token'."}), 400
+    
+    token = data.get('token')
     final_results = {}
     db_connection = None
+
     try:
-        # Aquí usamos las funciones de nuestro módulo 'motor_analisis'
+        # 1. Conectar a la base de datos
         db_connection = motor_analisis.create_db_connection(
             motor_analisis.DB_HOST, motor_analisis.DB_USER,
             motor_analisis.DB_PASS, motor_analisis.DB_NAME
@@ -194,49 +131,42 @@ def generar_reporte_endpoint():
         if not db_connection:
             raise ConnectionError("No se pudo conectar a la base de datos.")
 
-        # 1. Obtener informe del médico
-        final_results['medico'] = motor_analisis.get_patient_results(db_connection, token)
-        
-        # 2. Analizar con ambas IAs
-        final_results['deepseek'] = motor_analisis.analyze_with_deepseek(final_results['medico'], motor_analisis.DEEPSEEK_API_KEY)
-        final_results['gemini'] = motor_analisis.analyze_with_gemini(final_results['medico'], motor_analisis.GOOGLE_API_KEY)
-        
-        # 3. Comparar análisis
+        # 2. Obtener los datos del paciente
+        medico_report = motor_analisis.get_patient_results(db_connection, token)
+        if "Error" in medico_report or "No se encontraron" in medico_report:
+            return jsonify({"error": medico_report}), 404
+        final_results['medico'] = medico_report
+
+        # 3. Realizar análisis con las IAs
+        final_results['deepseek'] = motor_analisis.analyze_with_deepseek(medico_report, motor_analisis.DEEPSEEK_API_KEY)
+        final_results['gemini'] = motor_analisis.analyze_with_gemini(medico_report, motor_analisis.GOOGLE_API_KEY)
         final_results['comparacion'] = motor_analisis.compare_ai_analyses(final_results['deepseek'], final_results['gemini'], motor_analisis.GOOGLE_API_KEY)
-        
-        # 4. Generar el PDF
-        pdf_filepath = motor_analisis.generate_pdf_report(
-            token, final_results['medico'], final_results['deepseek'],
-            final_results['gemini'], final_results['comparacion']
+
+        # 4. Generar el PDF directamente en memoria
+        pdf_bytes = motor_analisis.generate_pdf_in_memory(
+            token,
+            final_results.get('medico', 'No disponible'),
+            final_results.get('deepseek', 'No disponible'),
+            final_results.get('gemini', 'No disponible'),
+            final_results.get('comparacion', 'No disponible')
         )
-        pdf_filename = os.path.basename(pdf_filepath)
-        
-        # 5. Construir la respuesta JSON final
-        response_data = {
-            "success": True,
-            "message": "Reporte generado exitosamente.",
-            "download_url": request.host_url.rstrip('/') + f"/reportes/{pdf_filename}",
-            "data": final_results
-        }
-        return jsonify(response_data), 200
+
+        # 5. Crear y devolver la respuesta de Flask como un archivo para descargar
+        return Response(
+            pdf_bytes,
+            mimetype="application/pdf",
+            headers={"Content-Disposition": f"attachment;filename=informe_comparativo_{token}.pdf"}
+        )
 
     except Exception as e:
         return jsonify({"error": f"Ocurrió un error inesperado en el servidor: {str(e)}"}), 500
     
     finally:
+        # Asegurarse de cerrar la conexión a la base de datos
         if db_connection and db_connection.is_connected():
             db_connection.close()
 
 
-@app.route('/reportes/<path:filename>')
-def descargar_reporte(filename):
-    """NUEVO ENDPOINT: Permite la descarga del PDF generado."""
-    try:
-        return send_from_directory(PDF_DIRECTORY, filename, as_attachment=True)
-    except FileNotFoundError:
-        return jsonify({"error": "Archivo no encontrado."}), 404
-
-
-# Punto de entrada para desarrollo local (puedes ejecutar 'python analizador_ia.py')
+# Punto de entrada para desarrollo local
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=5000)
