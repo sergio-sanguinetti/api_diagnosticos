@@ -146,7 +146,7 @@ def generar_reporte_endpoint():
 
         # 5. Crear y devolver la respuesta de Flask como un archivo para descargar
         return Response(
-            pdf_bytes,
+            bytes(pdf_bytes),
             mimetype="application/pdf",
             headers={"Content-Disposition": f"attachment;filename=informe_comparativo_{token}.pdf"}
         )
