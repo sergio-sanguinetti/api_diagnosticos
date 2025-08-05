@@ -54,21 +54,98 @@ def format_report_from_json(data):
 {resultados_str}"""
     return report
 
+# ==============================================================================
+
+# FUNCIÓN 2: ANÁLISIS CON EL MODELO DE LENGUAJE (LLM) - Sin cambios
+
+# ==============================================================================
+
 def analyze_results_with_llm(report, api_key):
+
     """Envía el informe a la API de Google Gemini para su análisis."""
-    # (El código de esta función es idéntico al que ya tenías, no lo repetiré por brevedad)
-    # ...
+
     try:
+
         genai.configure(api_key=api_key)
+
         model = genai.GenerativeModel('gemini-1.5-flash')
+
     except Exception as e:
+
         return f"Error configurando la API de Google: {e}"
-    prompt = f"**Rol:** Eres un asistente médico experto...\n{report}\n..." # Prompt completo
-    # ...
+
+
+
+    prompt = f"""
+
+    **Rol:** Eres un asistente médico experto en medicina ocupacional.
+
+
+
+    **Tarea:** Analiza el siguiente informe de resultados de un examen médico. Tu objetivo es identificar hallazgos anormales, correlacionarlos y proponer posibles diagnósticos diferenciales, junto con recomendaciones. NO inventes valores ni información; básate únicamente en los datos proporcionados.
+
+
+
+    **Informe para analizar:**
+
+    {report}
+
+
+
+    **Formato de Respuesta Requerido (usa Markdown):**
+
+
+
+    ### Resumen General del Paciente
+
+    (Describe en 1-2 frases el estado general del paciente basado en los resultados).
+
+
+
+    ### Hallazgos Clave
+
+    (Usa una lista con viñetas para enumerar todos los resultados marcados como 'anormal' o que estén claramente fuera de rangos normales. Ej: - Triglicéridos: 280 mg/dL (Resultado: anormal)).
+
+
+
+    ### Análisis y Correlación Diagnóstica
+
+    (Explica qué podrían significar los hallazgos anormales en conjunto. Correlaciona los datos entre sí, por ejemplo, cómo el IMC puede influir en el perfil lipídico).
+
+
+
+    ### Análisis por Examen y Posibles Diagnósticos
+
+    (Para cada examen con un hallazgo anormal de la sección "Hallazgos Clave", crea una subsección. Dentro de cada subsección, explica qué significa el resultado anormal y qué posibles diagnósticos sugiere. Asocia claramente cada diagnóstico al resultado del examen correspondiente. Por ejemplo:
+
+    **- Perfil Lipídico (Colesterol y Triglicéridos):**
+
+      - El colesterol total y los triglicéridos elevados sugieren un posible diagnóstico de **Dislipidemia** o **Hipertrigliceridemia**. Esto aumenta el riesgo cardiovascular.
+
+    **- Índice de Masa Corporal (IMC):**
+
+      - Un IMC de 28.5 indica **Sobrepeso**, lo que puede contribuir a la dislipidemia y la hipertensión.
+
+    )
+
+
+
+    ### Recomendaciones Sugeridas
+
+    (Sugiere los siguientes pasos, como consultar a un especialista, cambios en el estilo de vida o pruebas de seguimiento, basándote en el análisis anterior).
+
+    """
+
+
+
     try:
+
         response = model.generate_content(prompt)
+
         return response.text
+
     except Exception as e:
+
         return f"Error al generar contenido con la IA: {e}"
 
 
