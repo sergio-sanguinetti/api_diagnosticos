@@ -251,7 +251,7 @@ class PDF(FPDF):
         self.multi_cell(0, 5, text)
         self.ln()
 
-def generate_pdf_report(token, medico, deepseek, gemini, comparacion):
+def generate_pdf_in_memory(token, medico, deepseek, gemini, comparacion):
     """Genera el PDF directamente en memoria y devuelve los bytes."""
     pdf = PDF()
     pdf.add_font('DejaVu', '', 'DejaVuSans.ttf', uni=True)

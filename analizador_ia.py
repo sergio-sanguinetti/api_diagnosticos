@@ -1,13 +1,6 @@
 # ==============================================================================
-# API FLASK PARA ANÁLISIS DE DIAGNÓSTICOS MÉDICOS V2
-#
-# Descripción:
-# API con dos funcionalidades principales:
-# 1. /analizar: Recibe datos de formulario y devuelve un análisis de IA.
-# 2. /generar-reporte-comparativo: Recibe un token, consulta la BD,
-#    compara análisis de IAs y devuelve un reporte PDF directamente.
-# ==============================================================================
-
+# API FLASK PARA ANÁLISIS DE DIAGNÓSTICOS MÉDICOS
+#==============================================================================
 import os
 from flask import Flask, request, jsonify, Response
 from flask_cors import CORS
