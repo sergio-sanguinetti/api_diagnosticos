@@ -1,3 +1,7 @@
 Flask
-gunicorn
+Flask-Cors
+fpdf2
 google-generativeai
+gunicorn
+mysql-connector-python
+requests
