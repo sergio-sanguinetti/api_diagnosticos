@@ -131,20 +131,26 @@ def generar_reporte_endpoint():
         final_results['medico'] = medico_report
 
         # 3. Realizar análisis con las IAs
-        final_results['deepseek'] = motor_analisis.analyze_with_deepseek(medico_report, motor_analisis.DEEPSEEK_API_KEY)
-        final_results['gemini'] = motor_analisis.analyze_with_gemini(medico_report, motor_analisis.GOOGLE_API_KEY)
-        final_results['comparacion'] = motor_analisis.compare_ai_analyses(final_results['deepseek'], final_results['gemini'], motor_analisis.GOOGLE_API_KEY)
+        deepseek_analysis = motor_analisis.analyze_with_deepseek(medico_report, motor_analisis.DEEPSEEK_API_KEY)
+        gemini_analysis = motor_analisis.analyze_with_gemini(medico_report, motor_analisis.GOOGLE_API_KEY)
+        final_results['deepseek'] = deepseek_analysis
+        final_results['gemini'] = gemini_analysis
+        
+        # 4. Generar el Resumen Ejecutivo y la Comparación Detallada
+        summary_analysis = motor_analisis.generate_executive_summary(deepseek_analysis, gemini_analysis, motor_analisis.GOOGLE_API_KEY)
+        comparison_analysis = motor_analisis.compare_ai_analyses(deepseek_analysis, gemini_analysis, motor_analisis.GOOGLE_API_KEY)
 
-        # 4. Generar el PDF directamente en memoria
+        # 5. Generar el PDF directamente en memoria (Llamada corregida)
         pdf_bytes = motor_analisis.generate_pdf_in_memory(
             token,
             final_results.get('medico', 'No disponible'),
             final_results.get('deepseek', 'No disponible'),
             final_results.get('gemini', 'No disponible'),
-            final_results.get('comparacion', 'No disponible')
+            summary_analysis, # Argumento 5: el nuevo resumen
+            comparison_analysis # Argumento 6: la comparación que faltaba
         )
 
-        # 5. Crear y devolver la respuesta de Flask como un archivo para descargar
+        # 6. Crear y devolver la respuesta de Flask como un archivo para descargar
         return Response(
             bytes(pdf_bytes),
             mimetype="application/pdf",
@@ -152,6 +158,9 @@ def generar_reporte_endpoint():
         )
 
     except Exception as e:
+        # Captura cualquier otro error para dar una respuesta clara
+        import traceback
+        traceback.print_exc() # Imprime el error detallado en los logs de Render
         return jsonify({"error": f"Ocurrió un error inesperado en el servidor: {str(e)}"}), 500
     
     finally:
