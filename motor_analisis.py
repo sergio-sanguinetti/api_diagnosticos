@@ -14,7 +14,7 @@ import google.generativeai as genai
 from fpdf import FPDF
 import sys
 import re
-
+import os
 
 # METRICAS
 import numpy as np
