@@ -5,5 +5,4 @@ google-generativeai
 gunicorn
 mysql-connector-python
 requests
-sentence-transformers
-scikit-learn
+numpy 

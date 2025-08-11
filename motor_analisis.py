@@ -17,8 +17,6 @@ import re
 
 
 # METRICAS
-from sentence_transformers import SentenceTransformer
-from sklearn.metrics.pairwise import cosine_similarity
 import numpy as np
 
 # ==============================================================================
@@ -30,6 +28,14 @@ DB_PASS = "@9UbqRmS/oy"
 DB_NAME = "u212843563_good_salud"
 DEEPSEEK_API_KEY = "sk-37167855ce4243e8afe1ccb669021e64"
 GOOGLE_API_KEY = "AIzaSyDqsYubkpT4Q_CofYluhK6lqmQHJui_U9A"
+HUGGINGFACE_API_KEY = os.environ.get('HUGGINGFACE_API_KEY') 
+
+# MODELO DE LENGUAJE EMBEDDINGS
+
+HF_EMBEDDING_MODEL_URL = "https://api-inference.huggingface.co/pipeline/feature-extraction/sentence-transformers/all-MiniLM-L6-v2"
+
+
+
 
 
 # ==============================================================================
@@ -304,26 +310,51 @@ def compare_ai_analyses(deepseek_analysis, gemini_analysis, api_key):
 # MÉTRICAS 
 # ==============================================================================
 def calculate_semantic_similarity(text_medico, text_ia):
-    """Calcula la similitud de coseno entre el texto del médico y el de la IA."""
-    if not embedding_model:
-        return 0.0 # Devuelve 0 si el modelo no pudo cargarse
+    """Calcula la similitud de coseno usando la API de Inferencia de Hugging Face."""
+    if not HUGGINGFACE_API_KEY:
+        print("⚠️ No se encontró la clave de API de Hugging Face.")
+        return 0.0
 
     try:
-        # Extraemos solo el texto relevante, sin los títulos de sección
-        medico_content = re.search(r'SECCION_REPORTE_COMPLETO\n(.*?)\nSECCION_FIN', text_medico, re.DOTALL)
-        if medico_content:
-            medico_content = medico_content.group(1).strip()
-        else:
+        # Extraemos el texto relevante del informe del médico
+        medico_content_match = re.search(r'SECCION_REPORTE_COMPLETO\n(.*?)\nSECCION_FIN', text_medico, re.DOTALL)
+        if not medico_content_match:
             return 0.0
-            
-        # Generar embeddings
-        vector_medico = embedding_model.encode([medico_content])
-        vector_ia = embedding_model.encode([text_ia])
+        medico_content = medico_content_match.group(1).strip()
         
-        # Calcular similitud
-        similarity_score = cosine_similarity(vector_medico, vector_ia)[0][0]
+        # Preparamos la llamada a la API
+        headers = {"Authorization": f"Bearer {HUGGINGFACE_API_KEY}"}
+        payload = {
+            "inputs": [medico_content, text_ia],
+            "options": {"wait_for_model": True}
+        }
+        
+        # Hacemos la petición
+        response = requests.post(HF_EMBEDDING_MODEL_URL, headers=headers, json=payload)
+        response.raise_for_status() # Lanza un error si la petición falla
+        
+        embeddings = response.json()
+        
+        if not isinstance(embeddings, list) or len(embeddings) < 2:
+            print(f"❌ Respuesta inesperada de la API de Hugging Face: {embeddings}")
+            return 0.0
+
+        # Convertimos los resultados (listas) a vectores de numpy
+        vector_medico = np.array(embeddings[0])
+        vector_ia = np.array(embeddings[1])
+        
+        # Calculamos la similitud de coseno con numpy
+        dot_product = np.dot(vector_medico, vector_ia)
+        norm_medico = np.linalg.norm(vector_medico)
+        norm_ia = np.linalg.norm(vector_ia)
+        
+        similarity_score = dot_product / (norm_medico * norm_ia)
         
         return similarity_score
+
+    except requests.exceptions.RequestException as e:
+        print(f"❌ Error de red con la API de Hugging Face: {e}")
+        return 0.0
     except Exception as e:
         print(f"❌ Error calculando la similitud: {e}")
         return 0.0
