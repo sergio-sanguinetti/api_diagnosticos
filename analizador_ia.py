@@ -140,7 +140,12 @@ def generar_reporte_endpoint():
         summary_analysis = motor_analisis.generate_executive_summary(deepseek_analysis, gemini_analysis, motor_analisis.GOOGLE_API_KEY)
         comparison_analysis = motor_analisis.compare_ai_analyses(deepseek_analysis, gemini_analysis, motor_analisis.GOOGLE_API_KEY)
 
-        # 5. Generar el PDF directamente en memoria (Llamada corregida)
+        # 5. --- CALCULAR MÉTRICAS---
+        metrics = {}
+        metrics['deepseek_similarity'] = motor_analisis.calculate_semantic_similarity(medico_report, deepseek_analysis)
+        metrics['gemini_similarity'] = motor_analisis.calculate_semantic_similarity(medico_report, gemini_analysis)
+
+        # 6. Generar el PDF directamente en memoria
         pdf_bytes = motor_analisis.generate_pdf_in_memory(
             token,
             final_results.get('medico', 'No disponible'),
@@ -150,7 +155,7 @@ def generar_reporte_endpoint():
             comparison_analysis # Argumento 6: la comparación que faltaba
         )
 
-        # 6. Crear y devolver la respuesta de Flask como un archivo para descargar
+        # 7. Crear y devolver la respuesta de Flask como un archivo para descargar
         return Response(
             bytes(pdf_bytes),
             mimetype="application/pdf",

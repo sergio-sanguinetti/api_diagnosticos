@@ -15,6 +15,12 @@ from fpdf import FPDF
 import sys
 import re
 
+
+# METRICAS
+from sentence_transformers import SentenceTransformer
+from sklearn.metrics.pairwise import cosine_similarity
+import numpy as np
+
 # ==============================================================================
 # CONFIGURACIÓN DE CREDENCIALES
 # ==============================================================================
@@ -24,6 +30,17 @@ DB_PASS = "@9UbqRmS/oy"
 DB_NAME = "u212843563_good_salud"
 DEEPSEEK_API_KEY = "sk-37167855ce4243e8afe1ccb669021e64"
 GOOGLE_API_KEY = "AIzaSyDqsYubkpT4Q_CofYluhK6lqmQHJui_U9A"
+
+
+# ==============================================================================
+# CARGA DEL MODELO DE EMBEDDINGS (se carga una sola vez)
+# ==============================================================================
+# Usamos un modelo ligero y multilingüe, ideal para un entorno de servidor.
+try:
+    embedding_model = SentenceTransformer('all-MiniLM-L6-v2')
+except Exception as e:
+    print(f"⚠️ Error al cargar el modelo de embedding: {e}")
+    embedding_model = None
 
 # ==============================================================================
 # FUNCIÓN 1: CONEXIÓN A LA BASE DE DATOS
@@ -281,6 +298,36 @@ def compare_ai_analyses(deepseek_analysis, gemini_analysis, api_key):
         return response.text
     except Exception as e:
         return f"❌ Error al generar la comparación con la IA: {e}"
+    
+
+# ==============================================================================
+# MÉTRICAS 
+# ==============================================================================
+def calculate_semantic_similarity(text_medico, text_ia):
+    """Calcula la similitud de coseno entre el texto del médico y el de la IA."""
+    if not embedding_model:
+        return 0.0 # Devuelve 0 si el modelo no pudo cargarse
+
+    try:
+        # Extraemos solo el texto relevante, sin los títulos de sección
+        medico_content = re.search(r'SECCION_REPORTE_COMPLETO\n(.*?)\nSECCION_FIN', text_medico, re.DOTALL)
+        if medico_content:
+            medico_content = medico_content.group(1).strip()
+        else:
+            return 0.0
+            
+        # Generar embeddings
+        vector_medico = embedding_model.encode([medico_content])
+        vector_ia = embedding_model.encode([text_ia])
+        
+        # Calcular similitud
+        similarity_score = cosine_similarity(vector_medico, vector_ia)[0][0]
+        
+        return similarity_score
+    except Exception as e:
+        print(f"❌ Error calculando la similitud: {e}")
+        return 0.0
+
 
 # ==============================================================================
 # FUNCIÓN 7: GENERACIÓN DEL INFORME PDF
@@ -367,5 +414,30 @@ def generate_pdf_in_memory(token, medico, deepseek, gemini, summary, comparison)
     pdf.add_page()
     pdf.section_title('Análisis Comparativo Detallado de las IAs')
     pdf.section_body(comparison)
+
+     # --- PÁGINA 5: MÉTRICAS DE SIMILITUD ---
+    pdf.add_page()
+    pdf.section_title('Métricas de Similitud Semántica (vs. Informe Médico)')
+
+    # Contenido explicativo
+    explanation = (
+        "Esta sección cuantifica la similitud en el significado (semántica) entre el análisis del médico "
+        "y los análisis generados por cada IA. Se utiliza la 'Similitud de Coseno' sobre vectores de texto "
+        "generados con el modelo Sentence-BERT.\n\n"
+        "Un puntaje más cercano a 1.0 indica una mayor concordancia en el contenido y contexto."
+    )
+    pdf.section_body(explanation)
+    pdf.ln(10)
+   
+   # Mostramos los resultados
+    sim_deepseek = metrics.get('deepseek_similarity', 0.0)
+    sim_gemini = metrics.get('gemini_similarity', 0.0)
+
+    metric_text_ds = f"Similitud Semántica DeepSeek: {sim_deepseek:.4f} ({sim_deepseek*100:.2f}%)"
+    metric_text_gm = f"Similitud Semántica Gemini:   {sim_gemini:.4f} ({sim_gemini*100:.2f}%)"
+    
+    pdf.section_body(metric_text_ds, is_metric=True)
+    pdf.ln(2)
+    pdf.section_body(metric_text_gm, is_metric=True)
 
     return pdf.output()
