@@ -35,19 +35,6 @@ HUGGINGFACE_API_KEY = os.environ.get('HUGGINGFACE_API_KEY')
 HF_EMBEDDING_MODEL_URL = "https://api-inference.huggingface.co/pipeline/feature-extraction/sentence-transformers/all-MiniLM-L6-v2"
 
 
-
-
-
-# ==============================================================================
-# CARGA DEL MODELO DE EMBEDDINGS (se carga una sola vez)
-# ==============================================================================
-# Usamos un modelo ligero y multilingüe, ideal para un entorno de servidor.
-try:
-    embedding_model = SentenceTransformer('all-MiniLM-L6-v2')
-except Exception as e:
-    print(f"⚠️ Error al cargar el modelo de embedding: {e}")
-    embedding_model = None
-
 # ==============================================================================
 # FUNCIÓN 1: CONEXIÓN A LA BASE DE DATOS
 # ==============================================================================
