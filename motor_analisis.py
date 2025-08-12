@@ -304,41 +304,40 @@ def calculate_semantic_similarity(text_medico, text_ia):
     try:
         medico_content_match = re.search(r'SECCION_REPORTE_COMPLETO\n(.*?)\nSECCION_FIN', text_medico, re.DOTALL)
         if not medico_content_match:
+            print("❌ No se encontró SECCION_REPORTE_COMPLETO en el texto del médico.")
             return 0.0
         medico_content = medico_content_match.group(1).strip()
         
         headers = {"Authorization": f"Bearer {HUGGINGFACE_API_KEY}"}
+        
+        # --- PAYLOAD CORREGIDO PARA LA API ---
         payload = {
-           "inputs": {
-               "source_sentence": medico_content,
-               "sentences": [
-                   text_ia
-               ]
-           },
-           "options": {"wait_for_model": True}
+            "inputs": {
+                "source_sentence": medico_content,
+                "sentences": [
+                    text_ia
+                ]
+            },
+            "options": {"wait_for_model": True}
         }
         
         response = requests.post(HF_EMBEDDING_MODEL_URL, headers=headers, json=payload, timeout=90)
         response.raise_for_status() 
         
-        embeddings = response.json()
-       
-        vector_medico = np.array(embeddings[0])
-        vector_ia = np.array(embeddings[1])
+        similarity_scores = response.json()
         
-        dot_product = np.dot(vector_medico, vector_ia)
-        norm_medico = np.linalg.norm(vector_medico)
-        norm_ia = np.linalg.norm(vector_ia)
-        
-        if norm_medico == 0 or norm_ia == 0:
+        # La API devuelve una lista de puntajes, tomamos el primero
+        if not isinstance(similarity_scores, list) or len(similarity_scores) == 0:
+            print(f"❌ Respuesta de similitud inesperada de la API de Hugging Face: {similarity_scores}")
             return 0.0
 
-        similarity_score = dot_product / (norm_medico * norm_ia)
-        
-        return similarity_score
+        return float(similarity_scores[0])
 
     except requests.exceptions.RequestException as e:
         print(f"❌ Error de red con la API de Hugging Face: {e}")
+        # Imprime la respuesta del servidor si está disponible, para más detalles
+        if e.response:
+            print(f"Server response: {e.response.text}")
         return 0.0
     except Exception as e:
         print(f"❌ Error calculando la similitud: {e}")
