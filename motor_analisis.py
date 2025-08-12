@@ -312,26 +312,23 @@ def compare_ai_analyses(deepseek_analysis, gemini_analysis, api_key):
 def calculate_semantic_similarity(text_medico, text_ia):
     """Calcula la similitud de coseno usando la API de Inferencia de Hugging Face."""
     if not HUGGINGFACE_API_KEY:
-        print("⚠️ No se encontró la clave de API de Hugging Face.")
+        print("⚠️ No se encontró la clave de API de Hugging Face en las variables de entorno.")
         return 0.0
 
     try:
-        # Extraemos el texto relevante del informe del médico
         medico_content_match = re.search(r'SECCION_REPORTE_COMPLETO\n(.*?)\nSECCION_FIN', text_medico, re.DOTALL)
         if not medico_content_match:
             return 0.0
         medico_content = medico_content_match.group(1).strip()
         
-        # Preparamos la llamada a la API
         headers = {"Authorization": f"Bearer {HUGGINGFACE_API_KEY}"}
         payload = {
             "inputs": [medico_content, text_ia],
             "options": {"wait_for_model": True}
         }
         
-        # Hacemos la petición
-        response = requests.post(HF_EMBEDDING_MODEL_URL, headers=headers, json=payload)
-        response.raise_for_status() # Lanza un error si la petición falla
+        response = requests.post(HF_EMBEDDING_MODEL_URL, headers=headers, json=payload, timeout=90)
+        response.raise_for_status() 
         
         embeddings = response.json()
         
@@ -339,15 +336,16 @@ def calculate_semantic_similarity(text_medico, text_ia):
             print(f"❌ Respuesta inesperada de la API de Hugging Face: {embeddings}")
             return 0.0
 
-        # Convertimos los resultados (listas) a vectores de numpy
         vector_medico = np.array(embeddings[0])
         vector_ia = np.array(embeddings[1])
         
-        # Calculamos la similitud de coseno con numpy
         dot_product = np.dot(vector_medico, vector_ia)
         norm_medico = np.linalg.norm(vector_medico)
         norm_ia = np.linalg.norm(vector_ia)
         
+        if norm_medico == 0 or norm_ia == 0:
+            return 0.0
+
         similarity_score = dot_product / (norm_medico * norm_ia)
         
         return similarity_score
