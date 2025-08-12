@@ -152,7 +152,8 @@ def generar_reporte_endpoint():
             final_results.get('deepseek', 'No disponible'),
             final_results.get('gemini', 'No disponible'),
             summary_analysis, # Argumento 5: el nuevo resumen
-            comparison_analysis # Argumento 6: la comparación que faltaba
+            comparison_analysis,
+             metrics
         )
 
         # 7. Crear y devolver la respuesta de Flask como un archivo para descargar
