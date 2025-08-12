@@ -32,8 +32,7 @@ HUGGINGFACE_API_KEY = os.environ.get('HUGGINGFACE_API_KEY')
 
 # MODELO DE LENGUAJE EMBEDDINGS
 
-HF_EMBEDDING_MODEL_URL = "https://api-inference.huggingface.co/pipeline/feature-extraction/sentence-transformers/all-MiniLM-L6-v2"
-
+HF_EMBEDDING_MODEL_URL = "https://api-inference.huggingface.co/models/sentence-transformers/all-MiniLM-L6-v2"
 
 # ==============================================================================
 # FUNCIÓN 1: CONEXIÓN A LA BASE DE DATOS
