@@ -391,8 +391,12 @@ class PDF(FPDF):
         self.cell(0, 8, f' {title}', 0, 1, 'L', fill=True)
         self.ln(5)
     
-    def section_body(self, text):
-        self.set_font('DejaVu', '', 10)
+    def section_body(self, text, is_metric=False):
+        if is_metric:
+            self.set_font('DejaVu', '', 12) # Letra más grande para métricas
+        else:
+            self.set_font('DejaVu', '', 10)
+            
         self.set_text_color(51, 51, 51)
         # Limpieza de Markdown para una mejor presentación
         cleaned_text = re.sub(r'###\s*(.*?)\n', r'\1\n', text)
