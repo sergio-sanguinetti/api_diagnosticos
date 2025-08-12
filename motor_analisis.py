@@ -410,7 +410,7 @@ class PDF(FPDF):
         self.section_title(title2)
         self.section_body(content2)
 
-def generate_pdf_in_memory(token, medico, deepseek, gemini, summary, comparison):
+def generate_pdf_in_memory(token, medico, deepseek, gemini, summary, comparison,metrics):
     """Genera un PDF profesional multi-página en memoria."""
 
     pdf = PDF('P', 'mm', 'A4')
