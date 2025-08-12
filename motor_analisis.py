@@ -309,8 +309,13 @@ def calculate_semantic_similarity(text_medico, text_ia):
         
         headers = {"Authorization": f"Bearer {HUGGINGFACE_API_KEY}"}
         payload = {
-            "inputs": [medico_content, text_ia],
-            "options": {"wait_for_model": True}
+           "inputs": {
+               "source_sentence": medico_content,
+               "sentences": [
+                   text_ia
+               ]
+           },
+           "options": {"wait_for_model": True}
         }
         
         response = requests.post(HF_EMBEDDING_MODEL_URL, headers=headers, json=payload, timeout=90)
