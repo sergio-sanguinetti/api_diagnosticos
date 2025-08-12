@@ -322,11 +322,7 @@ def calculate_semantic_similarity(text_medico, text_ia):
         response.raise_for_status() 
         
         embeddings = response.json()
-        
-        if not isinstance(embeddings, list) or len(embeddings) < 2:
-            print(f"❌ Respuesta inesperada de la API de Hugging Face: {embeddings}")
-            return 0.0
-
+       
         vector_medico = np.array(embeddings[0])
         vector_ia = np.array(embeddings[1])
         
