@@ -514,7 +514,7 @@ class PDF(FPDF):
         
         # Configurar columnas con mejor distribución para página horizontal
         col_width = (self.w - self.l_margin - self.r_margin) / 3
-        row_height = 15  # Aumentar altura para mejor legibilidad en horizontal
+        base_row_height = 8  # Altura base por línea de texto
         
         # Encabezados
         self.set_font('DejaVu', 'B', 10)
@@ -522,10 +522,10 @@ class PDF(FPDF):
         self.set_text_color(0, 0, 0)
         
         # Dibujar encabezados
-        self.cell(col_width, row_height, 'MÉDICO/SISTEMA', 1, 0, 'C', fill=True)
-        self.cell(col_width, row_height, 'DEEPSEEK', 1, 0, 'C', fill=True)
-        self.cell(col_width, row_height, 'GEMINI', 1, 0, 'C', fill=True)
-        self.ln(row_height)
+        self.cell(col_width, base_row_height * 2, 'MÉDICO/SISTEMA', 1, 0, 'C', fill=True)
+        self.cell(col_width, base_row_height * 2, 'DEEPSEEK', 1, 0, 'C', fill=True)
+        self.cell(col_width, base_row_height * 2, 'GEMINI', 1, 0, 'C', fill=True)
+        self.ln(base_row_height * 2)
         
         # Configurar fuente para contenido
         self.set_font('DejaVu', '', 9)
@@ -536,34 +536,43 @@ class PDF(FPDF):
         
         # Si no hay pares, mostrar mensaje
         if max_pairs == 0:
-            self.cell(col_width * 3, row_height, 'No se encontraron pares diagnóstico-recomendación', 1, 0, 'C')
-            self.ln(row_height)
+            self.cell(col_width * 3, base_row_height * 2, 'No se encontraron pares diagnóstico-recomendación', 1, 0, 'C')
+            self.ln(base_row_height * 2)
             return
         
         # Llenar la tabla con mejor manejo de texto largo
         for i in range(max_pairs):
-            # Par del médico
+            # Preparar textos para cada columna
+            medico_text = ""
+            deepseek_text = ""
+            gemini_text = ""
+            
             if i < len(medico_pairs):
                 medico_diag, medico_rec = medico_pairs[i]
                 medico_text = f"{medico_diag}\n{medico_rec}"
-            else:
-                medico_text = ""
-            self._print_cell_with_wrap(col_width, row_height, medico_text, 1, 0, 'L')
             
-            # Par de DeepSeek
             if i < len(deepseek_pairs):
                 deepseek_diag, deepseek_rec = deepseek_pairs[i]
                 deepseek_text = f"{deepseek_diag}\n{deepseek_rec}"
-            else:
-                deepseek_text = ""
-            self._print_cell_with_wrap(col_width, row_height, deepseek_text, 1, 0, 'L')
             
-            # Par de Gemini
             if i < len(gemini_pairs):
                 gemini_diag, gemini_rec = gemini_pairs[i]
                 gemini_text = f"{gemini_diag}\n{gemini_rec}"
-            else:
-                gemini_text = ""
+            
+            # Calcular la altura máxima necesaria para esta fila
+            max_lines = max(
+                len(medico_text.split('\n')) if medico_text else 0,
+                len(deepseek_text.split('\n')) if deepseek_text else 0,
+                len(gemini_text.split('\n')) if gemini_text else 0
+            )
+            
+            # Asegurar mínimo 2 líneas (diagnóstico + recomendación)
+            max_lines = max(max_lines, 2)
+            row_height = max_lines * base_row_height + 4  # +4 para margen
+            
+            # Imprimir las celdas de esta fila
+            self._print_cell_with_wrap(col_width, row_height, medico_text, 1, 0, 'L')
+            self._print_cell_with_wrap(col_width, row_height, deepseek_text, 1, 0, 'L')
             self._print_cell_with_wrap(col_width, row_height, gemini_text, 1, 0, 'L')
             
             self.ln(row_height)
@@ -578,15 +587,26 @@ class PDF(FPDF):
         self.ln(5)
 
     def _print_cell_with_wrap(self, w, h, txt, border, ln, align):
-        """Imprime una celda con ajuste automático de texto para evitar desbordamiento."""
-        # Si el texto es muy largo, lo truncamos y agregamos "..."
-        # Ajustar para página horizontal con más espacio
-        max_chars = int(w / 2.2)  # Aproximadamente 2.2mm por carácter en horizontal
+        """Imprime una celda con ajuste automático de texto usando multi_cell para saltos de línea."""
+        # Guardar posición actual
+        x = self.get_x()
+        y = self.get_y()
         
-        if len(txt) > max_chars:
-            txt = txt[:max_chars-3] + "..."
+        # Dibujar borde si es necesario
+        if border:
+            self.rect(x, y, w, h)
         
-        self.cell(w, h, txt, border, ln, align)
+        # Configurar posición para el texto
+        self.set_xy(x + 2, y + 2)  # Pequeño margen interno
+        
+        # Usar multi_cell para permitir saltos de línea automáticos
+        self.multi_cell(w - 4, 4, txt, 0, align)  # w-4 para margen interno, altura 4mm por línea
+        
+        # Restaurar posición para la siguiente celda
+        if ln == 1:  # Si es la última celda de la fila
+            self.set_xy(x + w, y)
+        else:
+            self.set_xy(x + w, y)
 
 def generate_pdf_in_memory(token, medico, deepseek, gemini, summary, comparison,metrics):
     """Genera un PDF profesional multi-página en memoria."""
