@@ -2,17 +2,41 @@
 # API FLASK PARA ANÁLISIS DE DIAGNÓSTICOS MÉDICOS
 #==============================================================================
 import os
+import sys
+import traceback
 from flask import Flask, request, jsonify, Response
 from flask_cors import CORS
 import google.generativeai as genai
 
 # Importamos nuestro módulo con la lógica de reportes comparativos
-import motor_analisis 
+try:
+    import motor_analisis
+    print("✅ motor_analisis importado correctamente")
+except Exception as e:
+    print(f"❌ Error importando motor_analisis: {e}")
+    traceback.print_exc()
+    sys.exit(1) 
 
 # 1. CREACIÓN DE LA APLICACIÓN FLASK
 # ==================================
 app = Flask(__name__)
 CORS(app) # Habilita CORS para permitir peticiones desde tu frontend/PHP
+
+# Endpoint de salud para verificar que la aplicación esté funcionando
+@app.route('/health', methods=['GET'])
+def health_check():
+    """Endpoint de salud para verificar que la aplicación esté funcionando."""
+    try:
+        return jsonify({
+            'status': 'healthy',
+            'message': 'API de análisis de diagnósticos médicos funcionando correctamente',
+            'version': '1.0.0'
+        }), 200
+    except Exception as e:
+        return jsonify({
+            'status': 'error',
+            'message': f'Error en health check: {str(e)}'
+        }), 500
 
 
 # ==============================================================================
@@ -116,15 +140,21 @@ def generar_reporte_endpoint():
     db_connection = None
 
     try:
+        print("🚀 Iniciando generación de reporte comparativo...")
+        print(f"📋 Procesando token: {token}")
+        
         # 1. Conectar a la base de datos
+        print("🔌 Conectando a la base de datos...")
         db_connection = motor_analisis.create_db_connection(
             motor_analisis.DB_HOST, motor_analisis.DB_USER,
             motor_analisis.DB_PASS, motor_analisis.DB_NAME
         )
         if not db_connection:
             raise ConnectionError("No se pudo conectar a la base de datos.")
+        print("✅ Conexión a BD exitosa")
 
         # 2. Obtener los datos del paciente
+        print("👤 Obteniendo datos del paciente...")
         medico_report = motor_analisis.get_patient_results(db_connection, token)
         if "Error" in medico_report or "No se encontraron" in medico_report:
             return jsonify({"error": medico_report}), 404
@@ -177,4 +207,10 @@ def generar_reporte_endpoint():
 
 # Punto de entrada para desarrollo local
 if __name__ == '__main__':
-    app.run(debug=True, host='0.0.0.0', port=5000)
+    try:
+        print("🚀 Iniciando aplicación Flask...")
+        app.run(debug=True, host='0.0.0.0', port=5000)
+    except Exception as e:
+        print(f"❌ Error iniciando aplicación: {e}")
+        traceback.print_exc()
+        sys.exit(1)
