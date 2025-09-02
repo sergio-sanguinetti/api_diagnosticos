@@ -465,7 +465,7 @@ def extract_diagnosis_recommendation_pairs_with_gemini(text, source_name, api_ke
         genai.configure(api_key=api_key)
         model = genai.GenerativeModel('gemini-1.5-flash')
         
-                            prompt = f"""
+        prompt = f"""
                     **TAREA ESPECÍFICA**: Extrae pares de diagnóstico-recomendación específicos mencionados en el siguiente texto.
                     
                     **INSTRUCCIONES CRÍTICAS**:
