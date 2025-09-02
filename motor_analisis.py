@@ -687,11 +687,6 @@ class PDF(FPDF):
         if border:
             self.rect(x, y, w, h)
         
-        # Aplicar color de fondo si se proporciona
-        if bg_color:
-            self.set_fill_color(*bg_color)
-            self.rect(x, y, w, h, 'F')  # Rellenar con color de fondo
-        
         # Configurar posición para el texto
         self.set_xy(x + 2, y + 2)  # Pequeño margen interno
         
@@ -699,24 +694,43 @@ class PDF(FPDF):
         if '\n' in txt and txt.strip():
             lines = txt.split('\n')
             if len(lines) >= 2:
-                # Primera línea: diagnóstico en negrita
+                # Primera línea: diagnóstico en negrita con color de fondo si se proporciona
                 self.set_font('DejaVu', 'B', 8)
+                if bg_color:
+                    # Aplicar color de fondo solo al diagnóstico
+                    self.set_fill_color(*bg_color)
+                    # Calcular altura necesaria para el diagnóstico
+                    diag_height = 3.5
+                    self.rect(x + 2, y + 2, w - 4, diag_height, 'F')
+                    self.set_fill_color(255, 255, 255)  # Restaurar a blanco
+                
                 self.multi_cell(w - 4, 3.5, lines[0].strip(), 0, align)
                 
-                # Segunda línea: recomendación en normal
+                # Segunda línea: recomendación en normal (sin color de fondo)
                 self.set_font('DejaVu', '', 7)
                 self.multi_cell(w - 4, 3, lines[1].strip(), 0, align)
             else:
                 # Si solo hay una línea, mostrarla en negrita (es un diagnóstico)
                 self.set_font('DejaVu', 'B', 8)
+                if bg_color:
+                    # Aplicar color de fondo solo al diagnóstico
+                    self.set_fill_color(*bg_color)
+                    diag_height = 3.5
+                    self.rect(x + 2, y + 2, w - 4, diag_height, 'F')
+                    self.set_fill_color(255, 255, 255)  # Restaurar a blanco
+                
                 self.multi_cell(w - 4, 3.5, txt, 0, align)
         else:
             # Texto simple sin separación - asumir que es un diagnóstico
             self.set_font('DejaVu', 'B', 8)
+            if bg_color:
+                # Aplicar color de fondo solo al diagnóstico
+                self.set_fill_color(*bg_color)
+                diag_height = 3.5
+                self.rect(x + 2, y + 2, w - 4, diag_height, 'F')
+                self.set_fill_color(255, 255, 255)  # Restaurar a blanco
+            
             self.multi_cell(w - 4, 3.5, txt, 0, align)
-        
-        # Restaurar color de fondo a blanco
-        self.set_fill_color(255, 255, 255)
         
         # Restaurar posición para la siguiente celda
         if ln == 1:  # Si es la última celda de la fila
