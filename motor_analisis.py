@@ -416,6 +416,9 @@ def extract_diagnosis_recommendation_pairs_with_gemini(text, source_name, api_ke
             print(f"⚠️ Texto de {source_name} contiene errores, no se pueden extraer pares")
             return []
         
+        print(f"🔍 Extrayendo pares de {source_name} con Gemini API...")
+        print(f"📝 Texto a analizar (primeros 200 caracteres): {text[:200]}...")
+        
         genai.configure(api_key=api_key)
         model = genai.GenerativeModel('gemini-1.5-flash')
         
@@ -432,6 +435,7 @@ def extract_diagnosis_recommendation_pairs_with_gemini(text, source_name, api_ke
         6. Máximo 8 pares
         7. Si no hay pares específicos, devuelve lista vacía
         8. Maneja diferentes formatos: "Diagnóstico: X\nRecomendación: Y" o "X | Y" o texto narrativo
+        9. Busca términos médicos como: hipertensión, diabetes, dislipidemia, gastritis, anemia, sobrepeso, obesidad, bradicardia, policitemia
         
         **TEXTO A ANALIZAR**:
         {text}
@@ -449,8 +453,11 @@ def extract_diagnosis_recommendation_pairs_with_gemini(text, source_name, api_ke
         response = model.generate_content(prompt)
         result = response.text.strip()
         
+        print(f"🤖 Respuesta de Gemini para {source_name}: {result[:200]}...")
+        
         # Procesar la respuesta
         if "sin pares diagnóstico-recomendación" in result.lower():
+            print(f"⚠️ Gemini no encontró pares para {source_name}")
             return []
         
         # Dividir por líneas y procesar pares
@@ -464,7 +471,9 @@ def extract_diagnosis_recommendation_pairs_with_gemini(text, source_name, api_ke
                     recommendation = parts[1].strip().capitalize()
                     if len(diagnosis) > 3 and len(recommendation) > 3:
                         pairs.append((diagnosis, recommendation))
+                        print(f"✅ Par extraído de {source_name}: {diagnosis[:30]}... -> {recommendation[:30]}...")
         
+        print(f"📊 Total de pares extraídos de {source_name}: {len(pairs)}")
         return pairs[:8]  # Limitar a 8 pares máximo
         
     except Exception as e:
@@ -541,21 +550,24 @@ def extract_medico_pairs_from_structured_text(medico_text):
 def extract_fallback_pairs_from_text(text, source_name):
     """Función de respaldo para extraer pares básicos cuando las APIs fallan."""
     try:
+        print(f"🔧 Usando función de respaldo para {source_name}")
         pairs = []
         
         # Buscar patrones comunes de diagnóstico y recomendación
         # Patrón 1: "Diagnóstico: X" seguido de "Recomendación: Y"
         pattern1 = r'[Dd]iagnóstico[:\s]+([^.\n]+)[.\n].*?[Rr]ecomendación[:\s]+([^.\n]+)'
         matches1 = re.findall(pattern1, text, re.DOTALL)
+        print(f"🔍 Patrón 1 encontrado: {len(matches1)} coincidencias")
         
         for match in matches1:
             diagnosis = match[0].strip()
             recommendation = match[1].strip()
             if len(diagnosis) > 3 and len(recommendation) > 3:
                 pairs.append((diagnosis, recommendation))
+                print(f"✅ Par respaldo 1: {diagnosis[:30]}... -> {recommendation[:30]}...")
         
         # Patrón 2: Buscar términos médicos comunes seguidos de recomendaciones
-        medical_terms = ['hipertensión', 'diabetes', 'dislipidemia', 'gastritis', 'anemia', 'sobrepeso', 'obesidad']
+        medical_terms = ['hipertensión', 'diabetes', 'dislipidemia', 'gastritis', 'anemia', 'sobrepeso', 'obesidad', 'bradicardia', 'policitemia', 'trigliceridemia', 'colesterol']
         for term in medical_terms:
             if term.lower() in text.lower():
                 # Buscar recomendaciones cercanas
@@ -563,14 +575,44 @@ def extract_fallback_pairs_from_text(text, source_name):
                 if term_pos != -1:
                     # Buscar en un rango de 200 caracteres después del término
                     context = text[term_pos:term_pos+200]
-                    if 'recomendación' in context.lower() or 'sugerir' in context.lower():
+                    if 'recomendación' in context.lower() or 'sugerir' in context.lower() or 'se recomienda' in context.lower():
                         # Extraer recomendación básica
-                        rec_match = re.search(r'[Rr]ecomendación[:\s]+([^.\n]+)', context)
+                        rec_match = re.search(r'[Rr]ecomendación[:\s]+([^.\n]+)|[Ss]e recomienda[:\s]+([^.\n]+)', context)
                         if rec_match:
-                            recommendation = rec_match.group(1).strip()
+                            recommendation = (rec_match.group(1) or rec_match.group(2)).strip()
                             if len(recommendation) > 3:
                                 pairs.append((term.capitalize(), recommendation))
+                                print(f"✅ Par respaldo 2: {term.capitalize()} -> {recommendation[:30]}...")
         
+        # Patrón 3: Buscar secciones de recomendaciones
+        if not pairs:
+            print("🔍 Buscando secciones de recomendaciones...")
+            # Buscar secciones que contengan "Recomendaciones" o "Sugerencias"
+            rec_sections = re.findall(r'(?:Recomendaciones|Sugerencias)[:\s]*\n(.*?)(?:\n\n|\n###|\n##|$)', text, re.DOTALL | re.IGNORECASE)
+            for section in rec_sections:
+                # Buscar términos médicos en la sección
+                for term in medical_terms:
+                    if term.lower() in section.lower():
+                        # Crear recomendación genérica basada en el término
+                        if 'hipertensión' in term.lower():
+                            recommendation = "Control de presión arterial y dieta baja en sodio"
+                        elif 'diabetes' in term.lower():
+                            recommendation = "Control de glucosa y seguimiento endocrinológico"
+                        elif 'dislipidemia' in term.lower() or 'trigliceridemia' in term.lower() or 'colesterol' in term.lower():
+                            recommendation = "Dieta hipograsa y control de perfil lipídico"
+                        elif 'sobrepeso' in term.lower() or 'obesidad' in term.lower():
+                            recommendation = "Plan de alimentación y ejercicio"
+                        elif 'bradicardia' in term.lower():
+                            recommendation = "Evaluación cardiológica"
+                        elif 'policitemia' in term.lower():
+                            recommendation = "Evaluación por medicina interna"
+                        else:
+                            recommendation = "Seguimiento médico especializado"
+                        
+                        pairs.append((term.capitalize(), recommendation))
+                        print(f"✅ Par respaldo 3: {term.capitalize()} -> {recommendation}")
+        
+        print(f"📊 Total de pares de respaldo para {source_name}: {len(pairs)}")
         return pairs[:5]  # Limitar a 5 pares para respaldo
         
     except Exception as e:
@@ -831,8 +873,8 @@ def generate_pdf_in_memory(token, medico, deepseek, gemini, summary, comparison,
     
     # Para las IAs, usar Gemini API para mayor precisión, con respaldo
     deepseek_pairs = extract_diagnosis_recommendation_pairs_with_gemini(deepseek, "DeepSeek", GOOGLE_API_KEY)
-    if not deepseek_pairs and "Error" not in deepseek:
-        # Si no se extrajeron pares pero no hay error explícito, usar respaldo
+    if not deepseek_pairs:
+        # Si no se extrajeron pares, usar respaldo
         print("⚠️ Usando función de respaldo para DeepSeek")
         deepseek_pairs = extract_fallback_pairs_from_text(deepseek, "DeepSeek")
     print(f"📊 Pares extraídos de DeepSeek: {len(deepseek_pairs)}")
@@ -841,8 +883,8 @@ def generate_pdf_in_memory(token, medico, deepseek, gemini, summary, comparison,
             print(f"  DeepSeek {i+1}: {diag[:30]}... -> {rec[:30]}...")
     
     gemini_pairs = extract_diagnosis_recommendation_pairs_with_gemini(gemini, "Gemini", GOOGLE_API_KEY)
-    if not gemini_pairs and "Error" not in gemini:
-        # Si no se extrajeron pares pero no hay error explícito, usar respaldo
+    if not gemini_pairs:
+        # Si no se extrajeron pares, usar respaldo
         print("⚠️ Usando función de respaldo para Gemini")
         gemini_pairs = extract_fallback_pairs_from_text(gemini, "Gemini")
     print(f"📊 Pares extraídos de Gemini: {len(gemini_pairs)}")
