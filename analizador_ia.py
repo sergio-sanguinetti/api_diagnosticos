@@ -142,8 +142,17 @@ def generar_reporte_endpoint():
 
         # 5. --- CALCULAR MÉTRICAS---
         metrics = {}
+        # Similitud semántica (existente)
         metrics['deepseek_similarity'] = motor_analisis.calculate_semantic_similarity(medico_report, deepseek_analysis)
         metrics['gemini_similarity'] = motor_analisis.calculate_semantic_similarity(medico_report, gemini_analysis)
+        
+        # Nuevas métricas: Kappa Cohen
+        metrics['deepseek_kappa'] = motor_analisis.calculate_kappa_cohen(medico_report, deepseek_analysis)
+        metrics['gemini_kappa'] = motor_analisis.calculate_kappa_cohen(medico_report, gemini_analysis)
+        
+        # Nuevas métricas: Similitud de Jaccard
+        metrics['deepseek_jaccard'] = motor_analisis.calculate_jaccard_similarity(medico_report, deepseek_analysis)
+        metrics['gemini_jaccard'] = motor_analisis.calculate_jaccard_similarity(medico_report, gemini_analysis)
 
         # 6. Generar el PDF directamente en memoria
         pdf_bytes = motor_analisis.generate_pdf_in_memory(
