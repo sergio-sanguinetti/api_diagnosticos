@@ -205,7 +205,18 @@ def analyze_with_deepseek(report, api_key):
     try:
         response = requests.post(url, headers=headers, json=payload, timeout=90)
         response.raise_for_status()
-        return response.json()['choices'][0]['message']['content']
+        result = response.json()
+        
+        # Verificar que la respuesta tiene la estructura esperada
+        if 'choices' in result and len(result['choices']) > 0:
+            return result['choices'][0]['message']['content']
+        else:
+            return f"❌ Error con DeepSeek: Respuesta inesperada de la API"
+            
+    except requests.exceptions.Timeout:
+        return f"❌ Error con DeepSeek: Timeout - La API tardó demasiado en responder"
+    except requests.exceptions.RequestException as e:
+        return f"❌ Error con DeepSeek: Error de conexión - {e}"
     except Exception as e:
         return f"❌ Error con DeepSeek: {e}"
 
@@ -400,20 +411,27 @@ def extract_diagnoses_with_gemini(text, source_name, api_key):
 def extract_diagnosis_recommendation_pairs_with_gemini(text, source_name, api_key):
     """Extrae pares de diagnóstico-recomendación usando Gemini API con un prompt especializado."""
     try:
+        # Si el texto contiene errores, no intentar extraer pares
+        if "Error" in text or "❌" in text:
+            print(f"⚠️ Texto de {source_name} contiene errores, no se pueden extraer pares")
+            return []
+        
         genai.configure(api_key=api_key)
         model = genai.GenerativeModel('gemini-1.5-flash')
         
+        # Prompt mejorado que maneja diferentes formatos
         prompt = f"""
         **TAREA ESPECÍFICA**: Extrae pares de diagnóstico-recomendación específicos mencionados en el siguiente texto.
         
         **INSTRUCCIONES CRÍTICAS**:
         1. Extrae SOLO pares donde un diagnóstico específico tiene una recomendación asociada
-        2. Formato: "DIAGNÓSTICO | RECOMENDACIÓN"
+        2. Formato de salida: "DIAGNÓSTICO | RECOMENDACIÓN"
         3. NO extraigas diagnósticos sin recomendación asociada
         4. NO extraigas recomendaciones sin diagnóstico específico
         5. Extrae EXACTAMENTE como aparecen mencionados en el texto
         6. Máximo 8 pares
         7. Si no hay pares específicos, devuelve lista vacía
+        8. Maneja diferentes formatos: "Diagnóstico: X\nRecomendación: Y" o "X | Y" o texto narrativo
         
         **TEXTO A ANALIZAR**:
         {text}
@@ -451,6 +469,72 @@ def extract_diagnosis_recommendation_pairs_with_gemini(text, source_name, api_ke
         
     except Exception as e:
         print(f"❌ Error extrayendo pares diagnóstico-recomendación con Gemini para {source_name}: {e}")
+        return []
+
+def extract_medico_pairs_from_structured_text(medico_text):
+    """Extrae pares de diagnóstico-recomendación del texto estructurado del sistema médico."""
+    try:
+        # Buscar la sección de diagnósticos del sistema
+        diagnosticos_match = re.search(r'SECCION_DIAGNOSTICOS_SISTEMA\n(.*?)\nSECCION_FIN', medico_text, re.DOTALL)
+        if not diagnosticos_match:
+            return []
+        
+        diagnosticos_section = diagnosticos_match.group(1).strip()
+        pairs = []
+        
+        # Buscar patrones de "Diagnóstico: X\n  Recomendación: Y"
+        pattern = r'- Diagnóstico:\s*([^\n]+)\n\s*Recomendación:\s*([^\n]+)'
+        matches = re.findall(pattern, diagnosticos_section)
+        
+        for match in matches:
+            diagnosis = match[0].strip()
+            recommendation = match[1].strip()
+            if len(diagnosis) > 3 and len(recommendation) > 3:
+                pairs.append((diagnosis, recommendation))
+        
+        return pairs[:8]  # Limitar a 8 pares máximo
+        
+    except Exception as e:
+        print(f"❌ Error extrayendo pares del sistema médico: {e}")
+        return []
+
+def extract_fallback_pairs_from_text(text, source_name):
+    """Función de respaldo para extraer pares básicos cuando las APIs fallan."""
+    try:
+        pairs = []
+        
+        # Buscar patrones comunes de diagnóstico y recomendación
+        # Patrón 1: "Diagnóstico: X" seguido de "Recomendación: Y"
+        pattern1 = r'[Dd]iagnóstico[:\s]+([^.\n]+)[.\n].*?[Rr]ecomendación[:\s]+([^.\n]+)'
+        matches1 = re.findall(pattern1, text, re.DOTALL)
+        
+        for match in matches1:
+            diagnosis = match[0].strip()
+            recommendation = match[1].strip()
+            if len(diagnosis) > 3 and len(recommendation) > 3:
+                pairs.append((diagnosis, recommendation))
+        
+        # Patrón 2: Buscar términos médicos comunes seguidos de recomendaciones
+        medical_terms = ['hipertensión', 'diabetes', 'dislipidemia', 'gastritis', 'anemia', 'sobrepeso', 'obesidad']
+        for term in medical_terms:
+            if term.lower() in text.lower():
+                # Buscar recomendaciones cercanas
+                term_pos = text.lower().find(term.lower())
+                if term_pos != -1:
+                    # Buscar en un rango de 200 caracteres después del término
+                    context = text[term_pos:term_pos+200]
+                    if 'recomendación' in context.lower() or 'sugerir' in context.lower():
+                        # Extraer recomendación básica
+                        rec_match = re.search(r'[Rr]ecomendación[:\s]+([^.\n]+)', context)
+                        if rec_match:
+                            recommendation = rec_match.group(1).strip()
+                            if len(recommendation) > 3:
+                                pairs.append((term.capitalize(), recommendation))
+        
+        return pairs[:5]  # Limitar a 5 pares para respaldo
+        
+    except Exception as e:
+        print(f"❌ Error en extracción de respaldo para {source_name}: {e}")
         return []
 
 
@@ -700,10 +784,25 @@ def generate_pdf_in_memory(token, medico, deepseek, gemini, summary, comparison,
     # --- PÁGINA 6: TABLA COMPARATIVA DE DIAGNÓSTICOS Y RECOMENDACIONES (HORIZONTAL) ---
     pdf.add_page(orientation='L')  # Página horizontal para mejor visualización
     
-    # Extraer pares de diagnóstico-recomendación de cada fuente usando Gemini API para mayor precisión
-    medico_pairs = extract_diagnosis_recommendation_pairs_with_gemini(medico, "Médico", GOOGLE_API_KEY)
+    # Extraer pares de diagnóstico-recomendación de cada fuente
+    # Para el sistema médico, usar función específica para texto estructurado
+    medico_pairs = extract_medico_pairs_from_structured_text(medico)
+    print(f"📊 Pares extraídos del sistema médico: {len(medico_pairs)}")
+    
+    # Para las IAs, usar Gemini API para mayor precisión, con respaldo
     deepseek_pairs = extract_diagnosis_recommendation_pairs_with_gemini(deepseek, "DeepSeek", GOOGLE_API_KEY)
+    if not deepseek_pairs and "Error" not in deepseek:
+        # Si no se extrajeron pares pero no hay error explícito, usar respaldo
+        print("⚠️ Usando función de respaldo para DeepSeek")
+        deepseek_pairs = extract_fallback_pairs_from_text(deepseek, "DeepSeek")
+    print(f"📊 Pares extraídos de DeepSeek: {len(deepseek_pairs)}")
+    
     gemini_pairs = extract_diagnosis_recommendation_pairs_with_gemini(gemini, "Gemini", GOOGLE_API_KEY)
+    if not gemini_pairs and "Error" not in gemini:
+        # Si no se extrajeron pares pero no hay error explícito, usar respaldo
+        print("⚠️ Usando función de respaldo para Gemini")
+        gemini_pairs = extract_fallback_pairs_from_text(gemini, "Gemini")
+    print(f"📊 Pares extraídos de Gemini: {len(gemini_pairs)}")
     
     # Crear la tabla comparativa unificada
     pdf.print_diagnosis_recommendation_comparison_table(medico_pairs, deepseek_pairs, gemini_pairs)
