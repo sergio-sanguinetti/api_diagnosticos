@@ -1,0 +1,127 @@
+@startuml Componentes del Sistema
+!theme plain
+skinparam backgroundColor #FFFFFF
+skinparam componentBackgroundColor #E8F4FD
+skinparam componentBorderColor #2E86AB
+skinparam interfaceBackgroundColor #F0F8FF
+skinparam interfaceBorderColor #2E86AB
+
+title Componentes del Sistema - API de Diagnósticos Médicos
+
+package "API Web" {
+    [Flask App] as flask
+    [CORS Middleware] as cors
+    [Request Handler] as handler
+}
+
+package "Motor de Análisis" {
+    [Database Connector] as db_conn
+    [Data Processor] as processor
+    [AI Integration] as ai_integration
+    [Report Generator] as report_gen
+}
+
+package "Integración de IAs" {
+    [Google Gemini Client] as gemini_client
+    [DeepSeek Client] as deepseek_client
+    [Hugging Face Client] as hf_client
+    [Prompt Manager] as prompt_mgr
+}
+
+package "Generación de PDFs" {
+    [PDF Engine] as pdf_engine
+    [Font Manager] as font_mgr
+    [Layout Manager] as layout_mgr
+    [Content Formatter] as content_fmt
+}
+
+package "Base de Datos" {
+    [MySQL Connection Pool] as mysql_pool
+    [Query Executor] as query_exec
+    [Data Validator] as validator
+}
+
+package "APIs Externas" {
+    [Google Gemini API] as gemini_api
+    [DeepSeek API] as deepseek_api
+    [Hugging Face API] as hf_api
+}
+
+' Interfaces entre componentes
+interface "HTTP API" as http_interface
+interface "Database Interface" as db_interface
+interface "AI Interface" as ai_interface
+interface "PDF Interface" as pdf_interface
+
+' Conexiones principales
+flask --> cors : Uses
+flask --> handler : Routes to
+handler --> http_interface : Exposes
+
+handler --> db_conn : Calls
+handler --> processor : Calls
+handler --> ai_integration : Calls
+handler --> report_gen : Calls
+
+db_conn --> db_interface : Implements
+db_conn --> mysql_pool : Uses
+mysql_pool --> query_exec : Manages
+query_exec --> validator : Validates
+
+processor --> db_interface : Uses
+processor --> ai_integration : Triggers
+
+ai_integration --> ai_interface : Implements
+ai_integration --> gemini_client : Uses
+ai_integration --> deepseek_client : Uses
+ai_integration --> hf_client : Uses
+ai_integration --> prompt_mgr : Uses
+
+gemini_client --> gemini_api : Calls
+deepseek_client --> deepseek_api : Calls
+hf_client --> hf_api : Calls
+
+report_gen --> pdf_interface : Implements
+report_gen --> pdf_engine : Uses
+pdf_engine --> font_mgr : Uses
+pdf_engine --> layout_mgr : Uses
+pdf_engine --> content_fmt : Uses
+
+' Notas explicativas
+note top of flask
+Componente principal que:
+- Maneja peticiones HTTP
+- Coordina flujo de datos
+- Gestiona respuestas
+end note
+
+note top of ai_integration
+Coordina múltiples IAs:
+- Análisis paralelo
+- Comparación de resultados
+- Generación de resúmenes
+end note
+
+note top of pdf_engine
+Genera PDFs profesionales:
+- Múltiples páginas
+- Layouts personalizados
+- Fuentes Unicode
+end note
+
+note top of db_conn
+Gestiona conexiones:
+- Pool de conexiones
+- Manejo de errores
+- Reconexión automática
+end note
+
+note top of prompt_mgr
+Gestiona prompts:
+- Formato estándar
+- Personalización por IA
+- Optimización de resultados
+end note
+
+@enduml
+

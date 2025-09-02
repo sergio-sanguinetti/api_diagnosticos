@@ -343,6 +343,66 @@ def calculate_semantic_similarity(text_medico, text_ia):
         print(f"❌ Error calculando la similitud: {e}")
         return 0.0
 
+def extract_diagnoses_from_text(text, source_name):
+    """Extrae diagnósticos específicos de un texto usando patrones de búsqueda."""
+    diagnoses = []
+    
+    # Patrones comunes de diagnósticos médicos
+    diagnosis_patterns = [
+        r'(?:diagnóstico|diagnostico|diagnosticado|diagnosticada)[:\s]*([^.\n]+)',
+        r'(?:encontrado|encontrada|hallado|hallada|detectado|detectada)[:\s]*([^.\n]+)',
+        r'(?:presenta|presenta|tiene|sufre de)[:\s]*([^.\n]+)',
+        r'(?:hipertensión|hipertension|presión alta|presion alta)',
+        r'(?:gastritis|úlcera|ulcera|reflujo)',
+        r'(?:diabetes|diabético|diabetica)',
+        r'(?:colesterol alto|hipercolesterolemia)',
+        r'(?:triglicéridos altos|trigliceridos altos|hipertrigliceridemia)',
+        r'(?:anemia|hemoglobina baja)',
+        r'(?:obesidad|sobrepeso|índice de masa corporal alto)',
+        r'(?:asma|bronquitis|enfermedad pulmonar)',
+        r'(?:artritis|artrosis|dolor articular)',
+        r'(?:depresión|depresion|ansiedad)',
+        r'(?:migraña|migrana|cefalea)',
+        r'(?:insomnio|trastorno del sueño)',
+        r'(?:alergia|alérgico|alergica)',
+        r'(?:infección|infeccion|bacteriana|viral)',
+        r'(?:inflamación|inflamacion|inflamatorio)',
+        r'(?:tumor|masa|quiste)',
+        r'(?:fractura|lesión|lesion)'
+    ]
+    
+    text_lower = text.lower()
+    
+    for pattern in diagnosis_patterns:
+        matches = re.findall(pattern, text_lower, re.IGNORECASE)
+        for match in matches:
+            if isinstance(match, tuple):
+                match = match[0] if match[0] else match[1]
+            
+            # Limpiar y formatear el diagnóstico
+            diagnosis = match.strip()
+            if len(diagnosis) > 3 and len(diagnosis) < 100:  # Filtrar diagnósticos muy cortos o muy largos
+                # Capitalizar primera letra
+                diagnosis = diagnosis.capitalize()
+                if diagnosis not in diagnoses:
+                    diagnoses.append(diagnosis)
+    
+    # Si no se encontraron diagnósticos con patrones, buscar en secciones específicas
+    if not diagnoses:
+        # Buscar en secciones de hallazgos o diagnósticos
+        if "hallazgos" in text_lower:
+            hallazgos_section = re.search(r'hallazgos[:\s]*(.*?)(?:\n\n|\n###|$)', text, re.DOTALL | re.IGNORECASE)
+            if hallazgos_section:
+                hallazgos_text = hallazgos_section.group(1)
+                # Extraer elementos de lista
+                list_items = re.findall(r'[-•]\s*([^.\n]+)', hallazgos_text)
+                for item in list_items[:5]:  # Limitar a 5 diagnósticos
+                    item = item.strip().capitalize()
+                    if len(item) > 3 and item not in diagnoses:
+                        diagnoses.append(item)
+    
+    return diagnoses[:8]  # Limitar a 8 diagnósticos máximo
+
 
 # ==============================================================================
 # FUNCIÓN 7: GENERACIÓN DEL INFORME PDF
@@ -397,6 +457,63 @@ class PDF(FPDF):
         self.ln(5)
         self.section_title(title2)
         self.section_body(content2)
+
+    def print_diagnosis_comparison_table(self, medico_diagnoses, deepseek_diagnoses, gemini_diagnoses):
+        """Crea una tabla comparativa horizontal de diagnósticos encontrados por cada fuente."""
+        self.section_title('Tabla Comparativa de Diagnósticos Encontrados')
+        
+        # Configurar columnas
+        col_width = (self.w - self.l_margin - self.r_margin) / 3
+        row_height = 8
+        
+        # Encabezados
+        self.set_font('DejaVu', 'B', 10)
+        self.set_fill_color(240, 240, 240)
+        self.set_text_color(0, 0, 0)
+        
+        # Dibujar encabezados
+        self.cell(col_width, row_height, 'MÉDICO/SISTEMA', 1, 0, 'C', fill=True)
+        self.cell(col_width, row_height, 'DEEPSEEK', 1, 0, 'C', fill=True)
+        self.cell(col_width, row_height, 'GEMINI', 1, 0, 'C', fill=True)
+        self.ln(row_height)
+        
+        # Configurar fuente para contenido
+        self.set_font('DejaVu', '', 9)
+        self.set_fill_color(255, 255, 255)
+        
+        # Determinar el número máximo de filas
+        max_diagnoses = max(len(medico_diagnoses), len(deepseek_diagnoses), len(gemini_diagnoses))
+        
+        # Si no hay diagnósticos, mostrar mensaje
+        if max_diagnoses == 0:
+            self.cell(col_width * 3, row_height, 'No se encontraron diagnósticos específicos', 1, 0, 'C')
+            self.ln(row_height)
+            return
+        
+        # Llenar la tabla
+        for i in range(max_diagnoses):
+            # Diagnóstico del médico
+            medico_diag = medico_diagnoses[i] if i < len(medico_diagnoses) else ""
+            self.cell(col_width, row_height, medico_diag, 1, 0, 'L')
+            
+            # Diagnóstico de DeepSeek
+            deepseek_diag = deepseek_diagnoses[i] if i < len(deepseek_diagnoses) else ""
+            self.cell(col_width, row_height, deepseek_diag, 1, 0, 'L')
+            
+            # Diagnóstico de Gemini
+            gemini_diag = gemini_diagnoses[i] if i < len(gemini_diagnoses) else ""
+            self.cell(col_width, row_height, gemini_diag, 1, 0, 'L')
+            
+            self.ln(row_height)
+        
+        # Agregar nota explicativa
+        self.ln(5)
+        self.set_font('DejaVu', '', 8)
+        self.set_text_color(100, 100, 100)
+        note_text = "Esta tabla muestra los diagnósticos específicos extraídos de cada fuente. " \
+                   "Los diagnósticos se extraen automáticamente usando patrones de búsqueda médica."
+        self.multi_cell(0, 4, note_text)
+        self.ln(5)
 
 def generate_pdf_in_memory(token, medico, deepseek, gemini, summary, comparison,metrics):
     """Genera un PDF profesional multi-página en memoria."""
@@ -458,5 +575,16 @@ def generate_pdf_in_memory(token, medico, deepseek, gemini, summary, comparison,
     pdf.section_body(metric_text_ds, is_metric=True)
     pdf.ln(2)
     pdf.section_body(metric_text_gm, is_metric=True)
+
+    # --- PÁGINA 6: TABLA COMPARATIVA DE DIAGNÓSTICOS ---
+    pdf.add_page()
+    
+    # Extraer diagnósticos de cada fuente
+    medico_diagnoses = extract_diagnoses_from_text(medico, "Médico")
+    deepseek_diagnoses = extract_diagnoses_from_text(deepseek, "DeepSeek")
+    gemini_diagnoses = extract_diagnoses_from_text(gemini, "Gemini")
+    
+    # Crear la tabla comparativa
+    pdf.print_diagnosis_comparison_table(medico_diagnoses, deepseek_diagnoses, gemini_diagnoses)
 
     return pdf.output()

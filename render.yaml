@@ -1,0 +1,46 @@
+# Render Configuration File
+# API de Diagnósticos Médicos Ocupacionales
+
+services:
+  - type: web
+    name: api-diagnosticos-medicos
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn analizador_ia:app
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.9.16
+      - key: GOOGLE_API_KEY
+        sync: false
+      - key: DEEPSEEK_API_KEY
+        sync: false
+      - key: HUGGINGFACE_API_KEY
+        sync: false
+      - key: DB_HOST
+        sync: false
+      - key: DB_USER
+        sync: false
+      - key: DB_PASS
+        sync: false
+      - key: DB_NAME
+        sync: false
+    healthCheckPath: /
+    autoDeploy: true
+    branch: main
+
+# Variables de entorno requeridas (configurar en el dashboard de Render)
+# GOOGLE_API_KEY: Clave de API de Google Gemini
+# DEEPSEEK_API_KEY: Clave de API de DeepSeek
+# HUGGINGFACE_API_KEY: Clave de API de Hugging Face
+# DB_HOST: Host de la base de datos MySQL
+# DB_USER: Usuario de la base de datos
+# DB_PASS: Contraseña de la base de datos
+# DB_NAME: Nombre de la base de datos
+
+# Notas de configuración:
+# - sync: false indica que la variable debe configurarse manualmente en el dashboard
+# - autoDeploy: true habilita el despliegue automático en cambios de Git
+# - healthCheckPath: Ruta para verificar que el servicio esté funcionando
+# - plan: free (cambiar a paid si se necesita más recursos)
+

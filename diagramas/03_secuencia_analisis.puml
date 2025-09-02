@@ -1,0 +1,104 @@
+@startuml Secuencia de Análisis Médico
+!theme plain
+skinparam backgroundColor #FFFFFF
+skinparam sequenceArrowColor #2E86AB
+skinparam participantBackgroundColor #E8F4FD
+skinparam participantBorderColor #2E86AB
+
+title Secuencia de Análisis - Endpoint /generar-reporte-comparativo
+
+actor Cliente
+participant "API Flask" as API
+participant "Motor Análisis" as Motor
+participant "Base de Datos" as BD
+participant "DeepSeek API" as DeepSeek
+participant "Google Gemini" as Gemini
+participant "Hugging Face" as HF
+participant "Generador PDF" as PDF
+
+Cliente -> API: POST /generar-reporte-comparativo\n{token: "abc123"}
+activate API
+
+API -> Motor: create_db_connection()
+activate Motor
+Motor -> BD: Conectar MySQL
+activate BD
+BD --> Motor: Conexión establecida
+deactivate BD
+
+Motor -> BD: get_patient_results(token)
+activate BD
+BD --> Motor: Datos del paciente
+deactivate BD
+Motor --> API: Reporte formateado
+deactivate Motor
+
+API -> Motor: analyze_with_deepseek(report)
+activate Motor
+Motor -> DeepSeek: POST /chat/completions
+activate DeepSeek
+DeepSeek --> Motor: Análisis médico
+deactivate DeepSeek
+Motor --> API: Análisis DeepSeek
+deactivate Motor
+
+API -> Motor: analyze_with_gemini(report)
+activate Motor
+Motor -> Gemini: generate_content(prompt)
+activate Gemini
+Gemini --> Motor: Análisis médico
+deactivate Gemini
+Motor --> API: Análisis Gemini
+deactivate Motor
+
+API -> Motor: generate_executive_summary()
+activate Motor
+Motor -> Gemini: generate_content(prompt_resumen)
+activate Gemini
+Gemini --> Motor: Resumen ejecutivo
+deactivate Gemini
+Motor --> API: Resumen ejecutivo
+deactivate Motor
+
+API -> Motor: compare_ai_analyses()
+activate Motor
+Motor -> Gemini: generate_content(prompt_comparacion)
+activate Gemini
+Gemini --> Motor: Comparación detallada
+deactivate Gemini
+Motor --> API: Comparación detallada
+deactivate Motor
+
+API -> Motor: calculate_semantic_similarity()
+activate Motor
+Motor -> HF: POST /sentence-transformers
+activate HF
+HF --> Motor: Métricas de similitud
+deactivate HF
+Motor --> API: Métricas calculadas
+deactivate Motor
+
+API -> Motor: generate_pdf_in_memory()
+activate Motor
+Motor -> PDF: Crear PDF con 5 páginas
+activate PDF
+PDF --> Motor: PDF en bytes
+deactivate PDF
+Motor --> API: PDF generado
+deactivate Motor
+
+API --> Cliente: Response PDF\n(application/pdf)
+deactivate API
+
+note over API, PDF
+El PDF incluye:
+1. Datos del paciente
+2. Resumen ejecutivo
+3. Análisis comparativo
+4. Comparación detallada
+5. Métricas de similitud
+6. Tabla comparativa de diagnósticos
+end note
+
+@enduml
+

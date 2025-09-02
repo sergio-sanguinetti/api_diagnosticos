@@ -1,0 +1,75 @@
+@startuml Arquitectura General del Sistema
+!theme plain
+skinparam backgroundColor #FFFFFF
+skinparam componentStyle rectangle
+
+title Arquitectura General - API de Diagnósticos Médicos Ocupacionales
+
+package "Cliente" {
+    [Frontend/Formulario] as frontend
+    [Sistema PHP] as php
+}
+
+package "API Flask (Render)" {
+    [analizador_ia.py] as api
+    [motor_analisis.py] as motor
+    [Generador PDF] as pdf_gen
+}
+
+package "APIs de Inteligencia Artificial" {
+    [Google Gemini API] as gemini
+    [DeepSeek API] as deepseek
+    [Hugging Face API] as huggingface
+}
+
+package "Base de Datos" {
+    database "MySQL" as db
+}
+
+package "Servicios de Despliegue" {
+    [Render PaaS] as render
+}
+
+' Conexiones principales
+frontend --> api : POST /analizar
+php --> api : POST /generar-reporte-comparativo
+api --> motor : Llamadas internas
+motor --> db : Consultas SQL
+motor --> gemini : Análisis médico
+motor --> deepseek : Análisis médico
+motor --> huggingface : Métricas de similitud
+motor --> pdf_gen : Generación de reportes
+api --> pdf_gen : Generación de PDFs
+
+' Despliegue
+render --> api : Hosting
+render --> motor : Hosting
+render --> pdf_gen : Hosting
+
+' Variables de entorno
+note right of api
+Variables de entorno:
+- GOOGLE_API_KEY
+- DEEPSEEK_API_KEY
+- HUGGINGFACE_API_KEY
+- DB_HOST, DB_USER, DB_PASS, DB_NAME
+end note
+
+note right of motor
+Funcionalidades:
+- Conexión a BD
+- Análisis con IAs
+- Comparación de resultados
+- Cálculo de métricas
+end note
+
+note right of pdf_gen
+Características:
+- Múltiples páginas
+- Fuentes personalizadas
+- Formato profesional
+- Comparativas lado a lado
+end note
+
+@enduml
+

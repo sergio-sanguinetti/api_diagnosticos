@@ -1,0 +1,101 @@
+@startuml Despliegue en Render
+!theme plain
+skinparam backgroundColor #FFFFFF
+skinparam nodeBackgroundColor #E8F4FD
+skinparam nodeBorderColor #2E86AB
+skinparam databaseBackgroundColor #F0F8FF
+skinparam databaseBorderColor #2E86AB
+
+title Despliegue de la API en Render PaaS
+
+package "GitHub Repository" {
+    [analizador_ia.py] as main_file
+    [motor_analisis.py] as motor_file
+    [requirements.txt] as deps_file
+    [DejaVuSans.ttf] as font1
+    [DejaVuSans-Bold.ttf] as font2
+}
+
+package "Render PaaS" {
+    [Build Process] as build
+    [Python Runtime] as runtime
+    [Web Service] as service
+    [Environment Variables] as env_vars
+}
+
+package "External Services" {
+    [MySQL Database] as mysql
+    [Google Gemini API] as gemini
+    [DeepSeek API] as deepseek
+    [Hugging Face API] as hf
+}
+
+package "Client Applications" {
+    [Web Frontend] as web
+    [PHP System] as php
+    [Mobile App] as mobile
+}
+
+' Flujo de despliegue
+main_file --> build : Git Push
+motor_file --> build : Git Push
+deps_file --> build : Git Push
+font1 --> build : Git Push
+font2 --> build : Git Push
+
+build --> runtime : pip install -r requirements.txt
+runtime --> service : gunicorn analizador_ia:app
+
+' Variables de entorno
+env_vars --> service : GOOGLE_API_KEY
+env_vars --> service : DEEPSEEK_API_KEY
+env_vars --> service : HUGGINGFACE_API_KEY
+env_vars --> service : DB_HOST, DB_USER, DB_PASS, DB_NAME
+
+' Conexiones externas
+service --> mysql : Conexión MySQL
+service --> gemini : API Calls
+service --> deepseek : API Calls
+service --> hf : Embeddings API
+
+' Clientes
+web --> service : HTTP Requests
+php --> service : HTTP Requests
+mobile --> service : HTTP Requests
+
+' Configuración del servicio
+note right of service
+Configuración del Web Service:
+- Runtime: Python 3
+- Build Command: pip install -r requirements.txt
+- Start Command: gunicorn analizador_ia:app
+- Plan: Free (o superior)
+- Auto-deploy: Enabled
+end note
+
+note right of build
+Proceso de construcción:
+1. Clona repositorio Git
+2. Instala dependencias Python
+3. Verifica archivos requeridos
+4. Prepara entorno de ejecución
+end note
+
+note right of env_vars
+Variables críticas:
+- Claves de API de IAs
+- Credenciales de base de datos
+- URLs de servicios externos
+- Configuraciones de seguridad
+end note
+
+note right of runtime
+Entorno de ejecución:
+- Python 3.x
+- Dependencias instaladas
+- Archivos de fuentes disponibles
+- Permisos de sistema configurados
+end note
+
+@enduml
+

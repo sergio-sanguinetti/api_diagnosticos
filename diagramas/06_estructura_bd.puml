@@ -1,0 +1,102 @@
+@startuml Estructura de Base de Datos
+!theme plain
+skinparam backgroundColor #FFFFFF
+skinparam entityBackgroundColor #E8F4FD
+skinparam entityBorderColor #2E86AB
+skinparam databaseBackgroundColor #F0F8FF
+skinparam databaseBorderColor #2E86AB
+
+title Estructura de Base de Datos - API de Diagnósticos Médicos
+
+entity "resultados" {
+    * token_resultado : VARCHAR(255)
+    --
+    centro_medico : VARCHAR(255)
+    ciudad : VARCHAR(255)
+    fecha_examen : DATE
+    puesto : VARCHAR(255)
+    tipo_examen : VARCHAR(255)
+    aptitud : VARCHAR(255)
+    --
+    presion_a : VARCHAR(50)
+    resultado_presion_a : VARCHAR(50)
+    glucosa : DECIMAL(5,2)
+    resultado_glucosa : VARCHAR(50)
+    colesterol_total : DECIMAL(5,2)
+    resultado_colesterol_total : VARCHAR(50)
+    hdl_colesterol : DECIMAL(5,2)
+    resultado_hdl_colesterol : VARCHAR(50)
+    ldl_colesterol : DECIMAL(5,2)
+    resultado_ldl_colesterol : VARCHAR(50)
+    trigliceridos : DECIMAL(5,2)
+    resultado_trigliceridos : VARCHAR(50)
+    ac_urico : DECIMAL(5,2)
+    resultado_ac_urico : VARCHAR(50)
+    hemoglobina : DECIMAL(5,2)
+    resultado_hemoglobina : VARCHAR(50)
+    rpr : VARCHAR(50)
+    resultado_rpr : VARCHAR(50)
+    examen_orina : VARCHAR(255)
+    resultado_examen_orina : VARCHAR(50)
+    radiografia_torax : VARCHAR(255)
+    resultado_radiografia_torax : VARCHAR(50)
+    audiometria : VARCHAR(255)
+    resultado_audiometria : VARCHAR(50)
+    espirometria : VARCHAR(255)
+    resultado_espirometria : VARCHAR(50)
+    electrocardiograma : VARCHAR(255)
+    resultado_electrocardiograma : VARCHAR(50)
+    indice_c_c : DECIMAL(4,2)
+    resultado_indice_c_c : VARCHAR(50)
+    indice_m_c : DECIMAL(4,2)
+    resultado_indice_m_c : VARCHAR(50)
+    --
+    diagnosticos : JSON
+    created_at : TIMESTAMP
+    updated_at : TIMESTAMP
+}
+
+note right of "resultados"
+Tabla principal que almacena:
+- Información del paciente
+- Resultados de laboratorio
+- Diagnósticos en formato JSON
+- Metadatos del examen
+end note
+
+' Campos de ejemplo para diagnósticos JSON
+note bottom of "resultados"
+Ejemplo de campo diagnosticos:
+[
+  {
+    "diagnostico": "Hipertrigliceridemia",
+    "recomendacion": "Dieta baja en grasas"
+  },
+  {
+    "diagnostico": "Microhematuria",
+    "recomendacion": "Consultar urólogo"
+  }
+]
+end note
+
+' Configuración de la base de datos
+note left of "resultados"
+Configuración MySQL:
+- Host: 193.203.175.193
+- Usuario: u212843563_good_salud
+- Base: u212843563_good_salud
+- Charset: utf8mb4
+- Collation: utf8mb4_unicode_ci
+end note
+
+' Índices sugeridos
+note top of "resultados"
+Índices recomendados:
+- PRIMARY KEY (token_resultado)
+- INDEX (fecha_examen)
+- INDEX (centro_medico)
+- INDEX (tipo_examen)
+end note
+
+@enduml
+

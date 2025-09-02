@@ -1,0 +1,151 @@
+@startuml Casos de Uso del Sistema
+!theme plain
+skinparam backgroundColor #FFFFFF
+skinparam actorBackgroundColor #E8F4FD
+skinparam actorBorderColor #2E86AB
+skinparam usecaseBackgroundColor #F0F8FF
+skinparam usecaseBorderColor #2E86AB
+
+title Casos de Uso - API de Diagnósticos Médicos Ocupacionales
+
+actor "Médico Ocupacional" as medico
+actor "Sistema PHP" as sistema_php
+actor "Frontend Web" as frontend
+actor "Administrador" as admin
+
+package "Funcionalidades Principales" {
+    usecase "Analizar Datos de Formulario" as UC1
+    usecase "Generar Reporte Comparativo" as UC2
+    usecase "Consultar Base de Datos" as UC3
+    usecase "Integrar con IAs" as UC4
+    usecase "Generar PDF" as UC5
+}
+
+package "Funcionalidades de IA" {
+    usecase "Análisis con Google Gemini" as UC6
+    usecase "Análisis con DeepSeek" as UC7
+    usecase "Generar Resumen Ejecutivo" as UC8
+    usecase "Comparar Análisis de IAs" as UC9
+    usecase "Calcular Métricas de Similitud" as UC10
+}
+
+package "Funcionalidades de Reportes" {
+    usecase "Formatear Datos Médicos" as UC11
+    usecase "Crear Layout de PDF" as UC12
+    usecase "Aplicar Fuentes Personalizadas" as UC13
+    usecase "Generar Múltiples Páginas" as UC14
+    usecase "Extraer Diagnósticos Específicos" as UC19
+    usecase "Crear Tabla Comparativa" as UC20
+}
+
+package "Funcionalidades de Sistema" {
+    usecase "Gestionar Conexiones BD" as UC15
+    usecase "Manejar Variables de Entorno" as UC16
+    usecase "Validar Entradas" as UC17
+    usecase "Manejar Errores" as UC18
+}
+
+' Relaciones principales
+medico --> UC1 : Usa
+medico --> UC2 : Solicita
+sistema_php --> UC2 : Integra
+frontend --> UC1 : Envía datos
+admin --> UC16 : Configura
+
+' Relaciones de dependencia
+UC1 --> UC4 : Requiere
+UC1 --> UC6 : Usa
+UC2 --> UC3 : Requiere
+UC2 --> UC4 : Requiere
+UC2 --> UC5 : Genera
+UC2 --> UC8 : Incluye
+UC2 --> UC9 : Incluye
+UC2 --> UC10 : Incluye
+
+UC4 --> UC6 : Coordina
+UC4 --> UC7 : Coordina
+UC4 --> UC8 : Genera
+UC4 --> UC9 : Ejecuta
+UC4 --> UC10 : Calcula
+
+UC5 --> UC11 : Requiere
+UC5 --> UC12 : Usa
+UC5 --> UC13 : Aplica
+UC5 --> UC14 : Crea
+UC5 --> UC19 : Incluye
+UC5 --> UC20 : Incluye
+
+UC3 --> UC15 : Usa
+UC6 --> UC16 : Requiere
+UC7 --> UC16 : Requiere
+UC10 --> UC16 : Requiere
+
+' Casos de uso extendidos
+UC2 <.. UC8 : <<extend>>
+UC2 <.. UC9 : <<extend>>
+UC2 <.. UC10 : <<extend>>
+
+UC5 <.. UC11 : <<include>>
+UC5 <.. UC12 : <<include>>
+UC5 <.. UC13 : <<include>>
+UC5 <.. UC14 : <<include>>
+UC5 <.. UC19 : <<include>>
+UC5 <.. UC20 : <<include>>
+
+' Notas explicativas
+note right of UC1
+Endpoint: POST /analizar
+- Recibe datos del formulario
+- Analiza con Google Gemini
+- Retorna diagnóstico en JSON
+end note
+
+note right of UC2
+Endpoint: POST /generar-reporte-comparativo
+- Consulta BD con token
+- Analiza con múltiples IAs
+- Genera PDF comparativo
+- Incluye métricas de similitud
+end note
+
+note right of UC4
+Coordina múltiples IAs:
+- Análisis paralelo
+- Comparación de resultados
+- Síntesis de información
+- Evaluación de calidad
+end note
+
+note right of UC5
+PDF de 6 páginas:
+1. Datos del paciente
+2. Resumen ejecutivo
+3. Análisis comparativo
+4. Comparación detallada
+5. Métricas de similitud
+6. Tabla comparativa de diagnósticos
+end note
+
+note right of UC10
+Usa Hugging Face API:
+- Modelo: sentence-transformers
+- Métrica: Similitud de coseno
+- Compara: Análisis médico vs IA
+end note
+
+note right of UC19
+Extrae diagnósticos específicos:
+- Usa patrones de búsqueda médica
+- Identifica condiciones específicas
+- Limita a diagnósticos relevantes
+end note
+
+note right of UC20
+Crea tabla comparativa:
+- Formato horizontal
+- Tres columnas: Médico, DeepSeek, Gemini
+- Comparación visual de diagnósticos
+end note
+
+@enduml
+

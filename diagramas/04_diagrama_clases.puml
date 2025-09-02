@@ -1,0 +1,107 @@
+@startuml Diagrama de Clases del Sistema
+!theme plain
+skinparam backgroundColor #FFFFFF
+skinparam classBackgroundColor #E8F4FD
+skinparam classBorderColor #2E86AB
+skinparam classAttributeBackgroundColor #F0F8FF
+skinparam classMethodBackgroundColor #F0F8FF
+
+title Diagrama de Clases - API de Diagnósticos Médicos
+
+class Flask {
+    + __init__()
+    + run()
+}
+
+class app {
+    + route('/analizar')
+    + route('/generar-reporte-comparativo')
+}
+
+class motor_analisis {
+    + DB_HOST: str
+    + DB_USER: str
+    + DB_PASS: str
+    + DB_NAME: str
+    + DEEPSEEK_API_KEY: str
+    + GOOGLE_API_KEY: str
+    + HF_EMBEDDING_MODEL_URL: str
+}
+
+class motor_analisis_functions {
+    + create_db_connection(host, user, passwd, db)
+    + get_patient_results(connection, token)
+    + get_standard_prompt(report)
+    + analyze_with_deepseek(report, api_key)
+    + analyze_with_gemini(report, api_key)
+    + generate_executive_summary(deepseek, gemini, api_key)
+    + compare_ai_analyses(deepseek, gemini, api_key)
+    + calculate_semantic_similarity(text_medico, text_ia)
+}
+
+class PDF {
+    + __init__()
+    + header()
+    + footer()
+    + section_title(title)
+    + section_body(text, is_metric)
+    + print_comparison_layout(title1, content1, title2, content2)
+}
+
+class generate_pdf_in_memory {
+    + generate_pdf_in_memory(token, medico, deepseek, gemini, summary, comparison, metrics)
+}
+
+class format_report_from_json {
+    + format_report_from_json(data)
+}
+
+class analyze_results_with_llm {
+    + analyze_results_with_llm(report, api_key)
+}
+
+class Flask_Endpoints {
+    + analizar_endpoint()
+    + generar_reporte_endpoint()
+}
+
+' Relaciones
+Flask --> app
+app --> Flask_Endpoints
+Flask_Endpoints --> motor_analisis_functions
+Flask_Endpoints --> format_report_from_json
+Flask_Endpoints --> analyze_results_with_llm
+motor_analisis_functions --> PDF
+motor_analisis_functions --> generate_pdf_in_memory
+
+' Notas explicativas
+note top of motor_analisis
+Configuración global del sistema:
+- Credenciales de base de datos
+- Claves de API de IAs
+- URLs de modelos de embeddings
+end note
+
+note top of motor_analisis_functions
+Funciones principales del motor:
+- Conexión y consultas a BD
+- Análisis con múltiples IAs
+- Generación de resúmenes
+- Cálculo de métricas
+end note
+
+note top of PDF
+Clase personalizada de FPDF:
+- Soporte para fuentes Unicode
+- Diseño profesional de reportes
+- Múltiples secciones y layouts
+end note
+
+note top of Flask_Endpoints
+Endpoints principales:
+1. /analizar - Análisis directo
+2. /generar-reporte-comparativo - PDF comparativo
+end note
+
+@enduml
+

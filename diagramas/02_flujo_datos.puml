@@ -1,0 +1,80 @@
+@startuml Flujo de Datos del Sistema
+!theme plain
+skinparam backgroundColor #FFFFFF
+skinparam activityBackgroundColor #E8F4FD
+skinparam activityBorderColor #2E86AB
+skinparam activityDiamondBackgroundColor #FFE6CC
+skinparam activityDiamondBorderColor #FF8C00
+
+title Flujo de Datos - API de Diagnósticos Médicos
+
+start
+
+:Cliente envía petición;
+
+if (Tipo de petición?) then (POST /analizar)
+    :Recibir datos del formulario;
+    note right
+        Datos incluyen:
+        - Información del paciente
+        - Resultados de laboratorio
+        - Diagnósticos previos
+    end note
+    
+    :Formatear reporte para IA;
+    note right
+        Se estructura la información
+        en formato estándar para
+        análisis de IA
+    end note
+    
+    :Enviar a Google Gemini;
+    :Generar análisis médico;
+    :Devolver respuesta JSON;
+    
+else (POST /generar-reporte-comparativo)
+    :Recibir token del paciente;
+    :Conectar a base de datos MySQL;
+    :Obtener resultados del paciente;
+    
+    if (¿Datos encontrados?) then (Sí)
+        :Formatear reporte médico;
+        :Enviar a DeepSeek API;
+        :Enviar a Google Gemini API;
+        :Recibir análisis de ambas IAs;
+        
+        :Generar resumen ejecutivo;
+        note right
+            IA sintetiza ambos análisis
+            en un resumen unificado
+        end note
+        
+        :Comparar análisis de IAs;
+        :Calcular métricas de similitud;
+        note right
+            Usando Hugging Face API
+            para similitud semántica
+            entre análisis médico e IA
+        end note
+        
+        :Generar PDF en memoria;
+        note right
+            PDF con 6 páginas:
+            1. Datos del paciente
+            2. Resumen ejecutivo
+            3. Análisis comparativo
+            4. Comparación detallada
+            5. Métricas de similitud
+            6. Tabla comparativa de diagnósticos
+        end note
+        
+        :Devolver archivo PDF;
+        
+    else (No)
+        :Devolver error 404;
+    endif
+endif
+
+stop
+
+@enduml
