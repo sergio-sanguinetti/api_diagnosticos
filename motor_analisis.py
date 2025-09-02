@@ -397,68 +397,6 @@ def extract_diagnoses_with_gemini(text, source_name, api_key):
         print(f"❌ Error extrayendo diagnósticos con Gemini para {source_name}: {e}")
         return []
 
-def find_similar_diagnoses(medico_pairs, deepseek_pairs, gemini_pairs):
-    """Encuentra diagnósticos similares entre las diferentes fuentes y asigna colores."""
-    from difflib import SequenceMatcher
-    
-    # Función para calcular similitud entre dos textos
-    def similarity(a, b):
-        return SequenceMatcher(None, a.lower(), b.lower()).ratio()
-    
-    # Colores disponibles (RGB)
-    colors = [
-        (255, 240, 240),  # Rojo claro
-        (240, 255, 240),  # Verde claro
-        (240, 240, 255),  # Azul claro
-        (255, 255, 240),  # Amarillo claro
-        (255, 240, 255),  # Magenta claro
-        (240, 255, 255),  # Cian claro
-        (255, 230, 200),  # Naranja claro
-        (230, 230, 255),  # Púrpura claro
-    ]
-    
-    # Umbral de similitud (70% para considerar diagnósticos similares)
-    similarity_threshold = 0.7
-    
-    # Diccionario para almacenar grupos de diagnósticos similares
-    diagnosis_groups = {}
-    color_assignments = {}
-    
-    # Extraer diagnósticos de cada fuente
-    all_diagnoses = []
-    for i, (diag, rec) in enumerate(medico_pairs):
-        all_diagnoses.append(('medico', i, diag))
-    for i, (diag, rec) in enumerate(deepseek_pairs):
-        all_diagnoses.append(('deepseek', i, diag))
-    for i, (diag, rec) in enumerate(gemini_pairs):
-        all_diagnoses.append(('gemini', i, diag))
-    
-    # Agrupar diagnósticos similares
-    group_id = 0
-    for source1, idx1, diag1 in all_diagnoses:
-        if (source1, idx1) in color_assignments:
-            continue
-            
-        similar_diagnoses = [(source1, idx1, diag1)]
-        
-        for source2, idx2, diag2 in all_diagnoses:
-            if source2 == source1 and idx2 == idx1:
-                continue
-            if (source2, idx2) in color_assignments:
-                continue
-                
-            if similarity(diag1, diag2) >= similarity_threshold:
-                similar_diagnoses.append((source2, idx2, diag2))
-        
-        # Si hay diagnósticos similares, asignar color
-        if len(similar_diagnoses) > 1:
-            color = colors[group_id % len(colors)]
-            for source, idx, diag in similar_diagnoses:
-                color_assignments[(source, idx)] = color
-            group_id += 1
-    
-    return color_assignments
-
 def extract_diagnosis_recommendation_pairs_with_gemini(text, source_name, api_key):
     """Extrae pares de diagnóstico-recomendación usando Gemini API con un prompt especializado."""
     try:
@@ -466,36 +404,35 @@ def extract_diagnosis_recommendation_pairs_with_gemini(text, source_name, api_ke
         model = genai.GenerativeModel('gemini-1.5-flash')
         
         prompt = f"""
-                    **TAREA ESPECÍFICA**: Extrae pares de diagnóstico-recomendación específicos mencionados en el siguiente texto.
-                    
-                    **INSTRUCCIONES CRÍTICAS**:
-                    1. Extrae pares donde un diagnóstico médico específico tiene una recomendación clara asociada
-                    2. Formato: "DIAGNÓSTICO | RECOMENDACIÓN"
-                    3. Si hay diagnósticos sin recomendación específica, inclúyelos como: "DIAGNÓSTICO | Sin recomendación específica"
-                    4. NO extraigas recomendaciones sin diagnóstico específico
-                    5. Extrae EXACTAMENTE como aparecen mencionados en el texto
-                    6. Máximo 6 pares
-                    7. Mantén diagnósticos y recomendaciones cortos y claros
-                    8. Si no hay diagnósticos, devuelve lista vacía
-                    
-                    **TEXTO A ANALIZAR**:
-                    {text}
-                    
-                    **FORMATO DE RESPUESTA REQUERIDO**:
-                    Devuelve ÚNICAMENTE una lista de pares, uno por línea, sin numeración, sin explicaciones adicionales.
-                    Ejemplo:
-                    Hipertensión arterial | Dieta baja en sodio
-                    Gastritis crónica | Evitar alimentos picantes
-                    Diabetes tipo 2 | Sin recomendación específica
-                    
-                    Si no hay diagnósticos, escribe: "Sin diagnósticos encontrados"
-                    """
+        **TAREA ESPECÍFICA**: Extrae pares de diagnóstico-recomendación específicos mencionados en el siguiente texto.
+        
+        **INSTRUCCIONES CRÍTICAS**:
+        1. Extrae SOLO pares donde un diagnóstico específico tiene una recomendación asociada
+        2. Formato: "DIAGNÓSTICO | RECOMENDACIÓN"
+        3. NO extraigas diagnósticos sin recomendación asociada
+        4. NO extraigas recomendaciones sin diagnóstico específico
+        5. Extrae EXACTAMENTE como aparecen mencionados en el texto
+        6. Máximo 8 pares
+        7. Si no hay pares específicos, devuelve lista vacía
+        
+        **TEXTO A ANALIZAR**:
+        {text}
+        
+        **FORMATO DE RESPUESTA REQUERIDO**:
+        Devuelve ÚNICAMENTE una lista de pares, uno por línea, sin numeración, sin explicaciones adicionales.
+        Ejemplo:
+        Hipertensión arterial | Dieta baja en sodio
+        Gastritis crónica | Evitar alimentos picantes
+        Diabetes tipo 2 | Control de glucosa regular
+        
+        Si no hay pares específicos, escribe: "Sin pares diagnóstico-recomendación"
+        """
         
         response = model.generate_content(prompt)
         result = response.text.strip()
         
         # Procesar la respuesta
-        if "sin diagnósticos encontrados" in result.lower() or "sin pares diagnóstico-recomendación" in result.lower():
+        if "sin pares diagnóstico-recomendación" in result.lower():
             return []
         
         # Dividir por líneas y procesar pares
@@ -507,16 +444,10 @@ def extract_diagnosis_recommendation_pairs_with_gemini(text, source_name, api_ke
                 if len(parts) == 2:
                     diagnosis = parts[0].strip().capitalize()
                     recommendation = parts[1].strip().capitalize()
-                    
-                    # Validar que el diagnóstico tenga al menos 3 caracteres
-                    if len(diagnosis) > 3:
-                        # Si la recomendación es muy corta o es "sin recomendación específica", usar texto por defecto
-                        if len(recommendation) < 5 or "sin recomendación específica" in recommendation.lower():
-                            recommendation = "Evaluación médica recomendada"
-                        
+                    if len(diagnosis) > 3 and len(recommendation) > 3:
                         pairs.append((diagnosis, recommendation))
         
-        return pairs[:6]  # Limitar a 6 pares máximo
+        return pairs[:8]  # Limitar a 8 pares máximo
         
     except Exception as e:
         print(f"❌ Error extrayendo pares diagnóstico-recomendación con Gemini para {source_name}: {e}")
@@ -581,9 +512,6 @@ class PDF(FPDF):
         """Crea una tabla comparativa horizontal de diagnósticos y recomendaciones encontrados por cada fuente."""
         self.section_title('Tabla Comparativa de Diagnósticos y Recomendaciones')
         
-        # Encontrar diagnósticos similares y asignar colores
-        color_assignments = find_similar_diagnoses(medico_pairs, deepseek_pairs, gemini_pairs)
-        
         # Configurar columnas con mejor distribución para página horizontal
         col_width = (self.w - self.l_margin - self.r_margin) / 3
         base_row_height = 8  # Altura base por línea de texto
@@ -619,11 +547,6 @@ class PDF(FPDF):
             deepseek_text = ""
             gemini_text = ""
             
-            # Obtener colores de fondo para cada celda
-            medico_color = color_assignments.get(('medico', i), None)
-            deepseek_color = color_assignments.get(('deepseek', i), None)
-            gemini_color = color_assignments.get(('gemini', i), None)
-            
             if i < len(medico_pairs):
                 medico_diag, medico_rec = medico_pairs[i]
                 medico_text = f"{medico_diag}\n{medico_rec}"
@@ -637,39 +560,31 @@ class PDF(FPDF):
                 gemini_text = f"{gemini_diag}\n{gemini_rec}"
             
             # Calcular la altura máxima necesaria para esta fila
-            # Considerar que diagnóstico es más alto (3.5mm) y recomendación más compacta (3mm)
+            # Considerar que diagnóstico es más alto (4mm) y recomendación más compacta (3.5mm)
             max_height = 0
             
             for text in [medico_text, deepseek_text, gemini_text]:
                 if text and '\n' in text:
                     lines = text.split('\n')
                     if len(lines) >= 2:
-                        # Calcular líneas necesarias para cada parte
-                        diag_lines = max(1, len(lines[0]) // 20)  # Reducir a 20 caracteres por línea
-                        rec_lines = max(1, len(lines[1]) // 20)
-                        
-                        # Altura total: diagnóstico + recomendación + separación + márgenes
-                        text_height = (diag_lines * 3.5) + (rec_lines * 3) + 3 + 6  # +3 separación, +6 márgenes
+                        # Altura para diagnóstico (negrita, 4mm) + recomendación (normal, 3.5mm)
+                        text_height = 4 + 3.5 + 2  # +2 para separación
                     else:
-                        # Una línea de diagnóstico
-                        diag_lines = max(1, len(text) // 20)
-                        text_height = (diag_lines * 3.5) + 6  # +6 márgenes
+                        text_height = 4 + 2  # Una línea + margen
                 elif text:
-                    # Una línea de diagnóstico
-                    diag_lines = max(1, len(text) // 20)
-                    text_height = (diag_lines * 3.5) + 6  # +6 márgenes
+                    text_height = 4 + 2  # Una línea + margen
                 else:
-                    text_height = 12  # Altura mínima para celda vacía
+                    text_height = 8  # Altura mínima para celda vacía
                 
                 max_height = max(max_height, text_height)
             
             # Asegurar altura mínima
-            row_height = max(max_height, 18)  # Mínimo 18mm para diagnóstico + recomendación
+            row_height = max(max_height, 10)  # Mínimo 10mm para diagnóstico + recomendación
             
-            # Imprimir las celdas de esta fila con colores
-            self._print_cell_with_wrap(col_width, row_height, medico_text, 1, 0, 'L', medico_color)
-            self._print_cell_with_wrap(col_width, row_height, deepseek_text, 1, 0, 'L', deepseek_color)
-            self._print_cell_with_wrap(col_width, row_height, gemini_text, 1, 0, 'L', gemini_color)
+            # Imprimir las celdas de esta fila
+            self._print_cell_with_wrap(col_width, row_height, medico_text, 1, 0, 'L')
+            self._print_cell_with_wrap(col_width, row_height, deepseek_text, 1, 0, 'L')
+            self._print_cell_with_wrap(col_width, row_height, gemini_text, 1, 0, 'L')
             
             self.ln(row_height)
         
@@ -678,12 +593,11 @@ class PDF(FPDF):
         self.set_font('DejaVu', '', 8)
         self.set_text_color(100, 100, 100)
         note_text = "Esta tabla muestra los pares de diagnóstico-recomendación extraídos de cada fuente. " \
-                   "Los diagnósticos similares entre fuentes se resaltan con el mismo color de fondo. " \
                    "Los pares se extraen usando Gemini API con prompts especializados para mayor precisión."
         self.multi_cell(0, 4, note_text)
         self.ln(5)
 
-    def _print_cell_with_wrap(self, w, h, txt, border, ln, align, bg_color=None):
+    def _print_cell_with_wrap(self, w, h, txt, border, ln, align):
         """Imprime una celda con ajuste automático de texto usando multi_cell para saltos de línea."""
         # Guardar posición actual
         x = self.get_x()
@@ -700,43 +614,21 @@ class PDF(FPDF):
         if '\n' in txt and txt.strip():
             lines = txt.split('\n')
             if len(lines) >= 2:
-                # Primera línea: diagnóstico en negrita con color de fondo si se proporciona
-                self.set_font('DejaVu', 'B', 8)
-                if bg_color:
-                    # Aplicar color de fondo solo al diagnóstico
-                    self.set_fill_color(*bg_color)
-                    # Calcular altura necesaria para el diagnóstico (más espacio)
-                    diag_height = 4
-                    self.rect(x + 2, y + 2, w - 4, diag_height, 'F')
-                    self.set_fill_color(255, 255, 255)  # Restaurar a blanco
+                # Primera línea: diagnóstico en negrita
+                self.set_font('DejaVu', 'B', 9)
+                self.multi_cell(w - 4, 4, lines[0].strip(), 0, align)
                 
-                self.multi_cell(w - 4, 3.5, lines[0].strip(), 0, align)
-                
-                # Segunda línea: recomendación en normal (sin color de fondo)
-                self.set_font('DejaVu', '', 7)
-                self.multi_cell(w - 4, 3, lines[1].strip(), 0, align)
+                # Segunda línea: recomendación en normal
+                self.set_font('DejaVu', '', 8)
+                self.multi_cell(w - 4, 3.5, lines[1].strip(), 0, align)
             else:
-                # Si solo hay una línea, mostrarla en negrita (es un diagnóstico)
-                self.set_font('DejaVu', 'B', 8)
-                if bg_color:
-                    # Aplicar color de fondo solo al diagnóstico
-                    self.set_fill_color(*bg_color)
-                    diag_height = 4
-                    self.rect(x + 2, y + 2, w - 4, diag_height, 'F')
-                    self.set_fill_color(255, 255, 255)  # Restaurar a blanco
-                
-                self.multi_cell(w - 4, 3.5, txt, 0, align)
+                # Si solo hay una línea, mostrarla normal
+                self.set_font('DejaVu', '', 9)
+                self.multi_cell(w - 4, 4, txt, 0, align)
         else:
-            # Texto simple sin separación - asumir que es un diagnóstico
-            self.set_font('DejaVu', 'B', 8)
-            if bg_color:
-                # Aplicar color de fondo solo al diagnóstico
-                self.set_fill_color(*bg_color)
-                diag_height = 4
-                self.rect(x + 2, y + 2, w - 4, diag_height, 'F')
-                self.set_fill_color(255, 255, 255)  # Restaurar a blanco
-            
-            self.multi_cell(w - 4, 3.5, txt, 0, align)
+            # Texto simple sin separación
+            self.set_font('DejaVu', '', 9)
+            self.multi_cell(w - 4, 4, txt, 0, align)
         
         # Restaurar posición para la siguiente celda
         if ln == 1:  # Si es la última celda de la fila
