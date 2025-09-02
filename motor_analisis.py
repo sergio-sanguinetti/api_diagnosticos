@@ -630,26 +630,26 @@ class PDF(FPDF):
                 gemini_text = f"{gemini_diag}\n{gemini_rec}"
             
             # Calcular la altura máxima necesaria para esta fila
-            # Considerar que diagnóstico es más alto (4mm) y recomendación más compacta (3.5mm)
+            # Considerar que diagnóstico es más alto (3.5mm) y recomendación más compacta (3mm)
             max_height = 0
             
             for text in [medico_text, deepseek_text, gemini_text]:
                 if text and '\n' in text:
                     lines = text.split('\n')
                     if len(lines) >= 2:
-                        # Altura para diagnóstico (negrita, 4mm) + recomendación (normal, 3.5mm)
-                        text_height = 4 + 3.5 + 2  # +2 para separación
+                        # Altura para diagnóstico (negrita, 3.5mm) + recomendación (normal, 3mm) + márgenes
+                        text_height = 3.5 + 3 + 4  # +4 para márgenes internos
                     else:
-                        text_height = 4 + 2  # Una línea + margen
+                        text_height = 3.5 + 4  # Una línea + márgenes
                 elif text:
-                    text_height = 4 + 2  # Una línea + margen
+                    text_height = 3.5 + 4  # Una línea + márgenes
                 else:
                     text_height = 8  # Altura mínima para celda vacía
                 
                 max_height = max(max_height, text_height)
             
             # Asegurar altura mínima
-            row_height = max(max_height, 10)  # Mínimo 10mm para diagnóstico + recomendación
+            row_height = max(max_height, 12)  # Mínimo 12mm para diagnóstico + recomendación
             
             # Imprimir las celdas de esta fila con colores
             self._print_cell_with_wrap(col_width, row_height, medico_text, 1, 0, 'L', medico_color)
@@ -691,20 +691,20 @@ class PDF(FPDF):
             lines = txt.split('\n')
             if len(lines) >= 2:
                 # Primera línea: diagnóstico en negrita
-                self.set_font('DejaVu', 'B', 9)
-                self.multi_cell(w - 4, 4, lines[0].strip(), 0, align)
+                self.set_font('DejaVu', 'B', 8)
+                self.multi_cell(w - 4, 3.5, lines[0].strip(), 0, align)
                 
                 # Segunda línea: recomendación en normal
-                self.set_font('DejaVu', '', 8)
-                self.multi_cell(w - 4, 3.5, lines[1].strip(), 0, align)
+                self.set_font('DejaVu', '', 7)
+                self.multi_cell(w - 4, 3, lines[1].strip(), 0, align)
             else:
                 # Si solo hay una línea, mostrarla normal
-                self.set_font('DejaVu', '', 9)
-                self.multi_cell(w - 4, 4, txt, 0, align)
+                self.set_font('DejaVu', '', 8)
+                self.multi_cell(w - 4, 3.5, txt, 0, align)
         else:
             # Texto simple sin separación
-            self.set_font('DejaVu', '', 9)
-            self.multi_cell(w - 4, 4, txt, 0, align)
+            self.set_font('DejaVu', '', 8)
+            self.multi_cell(w - 4, 3.5, txt, 0, align)
         
         # Restaurar color de fondo a blanco
         self.set_fill_color(255, 255, 255)
