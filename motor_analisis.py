@@ -645,26 +645,26 @@ class PDF(FPDF):
                     lines = text.split('\n')
                     if len(lines) >= 2:
                         # Calcular líneas necesarias para cada parte
-                        diag_lines = max(1, len(lines[0]) // 25)  # Aproximadamente 25 caracteres por línea
-                        rec_lines = max(1, len(lines[1]) // 25)
+                        diag_lines = max(1, len(lines[0]) // 20)  # Reducir a 20 caracteres por línea
+                        rec_lines = max(1, len(lines[1]) // 20)
                         
-                        # Altura total: diagnóstico + recomendación + separación
-                        text_height = (diag_lines * 3.5) + (rec_lines * 3) + 2 + 4  # +2 separación, +4 márgenes
+                        # Altura total: diagnóstico + recomendación + separación + márgenes
+                        text_height = (diag_lines * 3.5) + (rec_lines * 3) + 3 + 6  # +3 separación, +6 márgenes
                     else:
                         # Una línea de diagnóstico
-                        diag_lines = max(1, len(text) // 25)
-                        text_height = (diag_lines * 3.5) + 4  # +4 márgenes
+                        diag_lines = max(1, len(text) // 20)
+                        text_height = (diag_lines * 3.5) + 6  # +6 márgenes
                 elif text:
                     # Una línea de diagnóstico
-                    diag_lines = max(1, len(text) // 25)
-                    text_height = (diag_lines * 3.5) + 4  # +4 márgenes
+                    diag_lines = max(1, len(text) // 20)
+                    text_height = (diag_lines * 3.5) + 6  # +6 márgenes
                 else:
-                    text_height = 8  # Altura mínima para celda vacía
+                    text_height = 12  # Altura mínima para celda vacía
                 
                 max_height = max(max_height, text_height)
             
             # Asegurar altura mínima
-            row_height = max(max_height, 15)  # Mínimo 15mm para diagnóstico + recomendación
+            row_height = max(max_height, 18)  # Mínimo 18mm para diagnóstico + recomendación
             
             # Imprimir las celdas de esta fila con colores
             self._print_cell_with_wrap(col_width, row_height, medico_text, 1, 0, 'L', medico_color)
@@ -705,8 +705,8 @@ class PDF(FPDF):
                 if bg_color:
                     # Aplicar color de fondo solo al diagnóstico
                     self.set_fill_color(*bg_color)
-                    # Calcular altura necesaria para el diagnóstico
-                    diag_height = 3.5
+                    # Calcular altura necesaria para el diagnóstico (más espacio)
+                    diag_height = 4
                     self.rect(x + 2, y + 2, w - 4, diag_height, 'F')
                     self.set_fill_color(255, 255, 255)  # Restaurar a blanco
                 
@@ -721,7 +721,7 @@ class PDF(FPDF):
                 if bg_color:
                     # Aplicar color de fondo solo al diagnóstico
                     self.set_fill_color(*bg_color)
-                    diag_height = 3.5
+                    diag_height = 4
                     self.rect(x + 2, y + 2, w - 4, diag_height, 'F')
                     self.set_fill_color(255, 255, 255)  # Restaurar a blanco
                 
@@ -732,7 +732,7 @@ class PDF(FPDF):
             if bg_color:
                 # Aplicar color de fondo solo al diagnóstico
                 self.set_fill_color(*bg_color)
-                diag_height = 3.5
+                diag_height = 4
                 self.rect(x + 2, y + 2, w - 4, diag_height, 'F')
                 self.set_fill_color(255, 255, 255)  # Restaurar a blanco
             
