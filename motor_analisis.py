@@ -512,12 +512,12 @@ class PDF(FPDF):
         """Crea una tabla comparativa horizontal de diagnósticos y recomendaciones encontrados por cada fuente."""
         self.section_title('Tabla Comparativa de Diagnósticos y Recomendaciones')
         
-        # Configurar columnas con mejor distribución
+        # Configurar columnas con mejor distribución para página horizontal
         col_width = (self.w - self.l_margin - self.r_margin) / 3
-        row_height = 12  # Aumentar altura para acomodar diagnóstico + recomendación
+        row_height = 15  # Aumentar altura para mejor legibilidad en horizontal
         
         # Encabezados
-        self.set_font('DejaVu', 'B', 9)
+        self.set_font('DejaVu', 'B', 10)
         self.set_fill_color(240, 240, 240)
         self.set_text_color(0, 0, 0)
         
@@ -528,7 +528,7 @@ class PDF(FPDF):
         self.ln(row_height)
         
         # Configurar fuente para contenido
-        self.set_font('DejaVu', '', 8)
+        self.set_font('DejaVu', '', 9)
         self.set_fill_color(255, 255, 255)
         
         # Determinar el número máximo de filas
@@ -580,7 +580,8 @@ class PDF(FPDF):
     def _print_cell_with_wrap(self, w, h, txt, border, ln, align):
         """Imprime una celda con ajuste automático de texto para evitar desbordamiento."""
         # Si el texto es muy largo, lo truncamos y agregamos "..."
-        max_chars = int(w / 2.5)  # Aproximadamente 2.5mm por carácter
+        # Ajustar para página horizontal con más espacio
+        max_chars = int(w / 2.2)  # Aproximadamente 2.2mm por carácter en horizontal
         
         if len(txt) > max_chars:
             txt = txt[:max_chars-3] + "..."
@@ -648,8 +649,8 @@ def generate_pdf_in_memory(token, medico, deepseek, gemini, summary, comparison,
     pdf.ln(2)
     pdf.section_body(metric_text_gm, is_metric=True)
 
-    # --- PÁGINA 6: TABLA COMPARATIVA DE DIAGNÓSTICOS Y RECOMENDACIONES ---
-    pdf.add_page()
+    # --- PÁGINA 6: TABLA COMPARATIVA DE DIAGNÓSTICOS Y RECOMENDACIONES (HORIZONTAL) ---
+    pdf.add_page(orientation='L')  # Página horizontal para mejor visualización
     
     # Extraer pares de diagnóstico-recomendación de cada fuente usando Gemini API para mayor precisión
     medico_pairs = extract_diagnosis_recommendation_pairs_with_gemini(medico, "Médico", GOOGLE_API_KEY)

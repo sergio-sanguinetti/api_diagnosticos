@@ -62,10 +62,10 @@ else (POST /generar-reporte-comparativo)
             PDF con 6 páginas:
             1. Datos del paciente
             2. Resumen ejecutivo
-            3. Análisis comparativo
+            3. Análisis comparativo (horizontal)
             4. Comparación detallada
             5. Métricas de similitud
-            6. Tabla comparativa de diagnósticos y recomendaciones
+            6. Tabla comparativa de diagnósticos y recomendaciones (horizontal)
         end note
         
         :Devolver archivo PDF;

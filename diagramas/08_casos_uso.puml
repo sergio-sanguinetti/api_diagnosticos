@@ -123,10 +123,10 @@ note right of UC5
 PDF de 6 páginas:
 1. Datos del paciente
 2. Resumen ejecutivo
-3. Análisis comparativo
+3. Análisis comparativo (horizontal)
 4. Comparación detallada
 5. Métricas de similitud
-6. Tabla comparativa de diagnósticos y recomendaciones
+6. Tabla comparativa de diagnósticos y recomendaciones (horizontal)
 end note
 
 note right of UC10
