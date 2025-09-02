@@ -477,21 +477,61 @@ def extract_medico_pairs_from_structured_text(medico_text):
         # Buscar la sección de diagnósticos del sistema
         diagnosticos_match = re.search(r'SECCION_DIAGNOSTICOS_SISTEMA\n(.*?)\nSECCION_FIN', medico_text, re.DOTALL)
         if not diagnosticos_match:
+            print("⚠️ No se encontró SECCION_DIAGNOSTICOS_SISTEMA en el texto del médico")
             return []
         
         diagnosticos_section = diagnosticos_match.group(1).strip()
+        print(f"📋 Sección de diagnósticos encontrada: {len(diagnosticos_section)} caracteres")
         pairs = []
         
         # Buscar patrones de "Diagnóstico: X\n  Recomendación: Y"
         pattern = r'- Diagnóstico:\s*([^\n]+)\n\s*Recomendación:\s*([^\n]+)'
         matches = re.findall(pattern, diagnosticos_section)
+        print(f"🔍 Patrones encontrados con regex: {len(matches)}")
         
         for match in matches:
             diagnosis = match[0].strip()
             recommendation = match[1].strip()
             if len(diagnosis) > 3 and len(recommendation) > 3:
                 pairs.append((diagnosis, recommendation))
+                print(f"✅ Par extraído: {diagnosis[:30]}... -> {recommendation[:30]}...")
         
+        # Si no se encontraron pares con el patrón principal, intentar otros patrones
+        if not pairs:
+            print("🔍 Intentando patrones alternativos...")
+            
+            # Patrón alternativo 1: Solo diagnósticos sin recomendaciones explícitas
+            alt_pattern1 = r'- Diagnóstico:\s*([^\n]+)'
+            alt_matches1 = re.findall(alt_pattern1, diagnosticos_section)
+            print(f"🔍 Diagnósticos encontrados sin recomendaciones: {len(alt_matches1)}")
+            
+            for diag in alt_matches1:
+                diagnosis = diag.strip()
+                if len(diagnosis) > 3:
+                    # Crear una recomendación genérica
+                    recommendation = "Evaluación médica y seguimiento recomendado"
+                    pairs.append((diagnosis, recommendation))
+                    print(f"✅ Par con recomendación genérica: {diagnosis[:30]}... -> {recommendation}")
+            
+            # Patrón alternativo 2: Buscar en el texto completo del reporte
+            if not pairs:
+                print("🔍 Buscando en el reporte completo...")
+                reporte_match = re.search(r'SECCION_REPORTE_COMPLETO\n(.*?)\nSECCION_FIN', medico_text, re.DOTALL)
+                if reporte_match:
+                    reporte_completo = reporte_match.group(1)
+                    # Buscar diagnósticos en el reporte completo
+                    diag_pattern = r'([A-ZÁÉÍÓÚÑ][A-ZÁÉÍÓÚÑ\s]+(?:EMIA|OSIS|ITIS|ALGIA|PENIA|CEMIA|LIPIDEMIA|POLICITEMIA|BRADICARDIA|SOBREPESO|DEFICIENCIA))'
+                    diag_matches = re.findall(diag_pattern, reporte_completo)
+                    print(f"🔍 Diagnósticos encontrados en reporte completo: {len(diag_matches)}")
+                    
+                    for diag in diag_matches:
+                        diagnosis = diag.strip()
+                        if len(diagnosis) > 3 and len(diagnosis) < 50:
+                            recommendation = "Seguimiento médico especializado recomendado"
+                            pairs.append((diagnosis, recommendation))
+                            print(f"✅ Par del reporte completo: {diagnosis[:30]}... -> {recommendation}")
+        
+        print(f"📊 Total de pares válidos extraídos: {len(pairs)}")
         return pairs[:8]  # Limitar a 8 pares máximo
         
     except Exception as e:
@@ -796,6 +836,9 @@ def generate_pdf_in_memory(token, medico, deepseek, gemini, summary, comparison,
         print("⚠️ Usando función de respaldo para DeepSeek")
         deepseek_pairs = extract_fallback_pairs_from_text(deepseek, "DeepSeek")
     print(f"📊 Pares extraídos de DeepSeek: {len(deepseek_pairs)}")
+    if deepseek_pairs:
+        for i, (diag, rec) in enumerate(deepseek_pairs[:3]):  # Mostrar solo los primeros 3
+            print(f"  DeepSeek {i+1}: {diag[:30]}... -> {rec[:30]}...")
     
     gemini_pairs = extract_diagnosis_recommendation_pairs_with_gemini(gemini, "Gemini", GOOGLE_API_KEY)
     if not gemini_pairs and "Error" not in gemini:
@@ -803,8 +846,68 @@ def generate_pdf_in_memory(token, medico, deepseek, gemini, summary, comparison,
         print("⚠️ Usando función de respaldo para Gemini")
         gemini_pairs = extract_fallback_pairs_from_text(gemini, "Gemini")
     print(f"📊 Pares extraídos de Gemini: {len(gemini_pairs)}")
+    if gemini_pairs:
+        for i, (diag, rec) in enumerate(gemini_pairs[:3]):  # Mostrar solo los primeros 3
+            print(f"  Gemini {i+1}: {diag[:30]}... -> {rec[:30]}...")
     
     # Crear la tabla comparativa unificada
     pdf.print_diagnosis_recommendation_comparison_table(medico_pairs, deepseek_pairs, gemini_pairs)
 
     return pdf.output()
+
+# ==============================================================================
+# FUNCIÓN DE PRUEBA PARA DEBUGGING
+# ==============================================================================
+def test_medico_extraction():
+    """Función de prueba para verificar la extracción de pares del sistema médico."""
+    # Simular texto del sistema médico
+    test_medico_text = """
+SECCION_INFO_PACIENTE
+- Centro Médico: Test Medical Center
+- Ciudad: Test City
+SECCION_FIN
+
+SECCION_HALLAZGOS_CLAVE
+- Presión Arterial: 140/90 (Resultado: anormal)
+SECCION_FIN
+
+SECCION_DIAGNOSTICOS_SISTEMA
+**Perfil Lipídico**
+- Diagnóstico: HIPERTRIGLICERIDEMIA
+  Recomendación: Dieta hipograsa y control de perfil lipídico
+
+- Diagnóstico: OTRA HIPERLIPIDEMIA (COLESTEROL LDL 120.37MG/DL)
+  Recomendación: Control de colesterol y evaluación nutricional
+
+**Hemograma y Bioquímica**
+- Diagnóstico: POLICITEMIA SECUNDARIA
+  Recomendación: Evaluación por medicina interna
+
+- Diagnóstico: SOBREPESO
+  Recomendación: Plan de alimentación y ejercicio
+
+**Otros Diagnósticos**
+- Diagnóstico: BRADICARDIA SINUSAL
+  Recomendación: Evaluación cardiológica
+
+- Diagnóstico: DEFICIENCIA DE LIPOPROTEÍNAS HDL
+  Recomendación: Modificación de estilo de vida
+SECCION_FIN
+
+SECCION_REPORTE_COMPLETO
+Información del paciente y resultados...
+SECCION_FIN
+"""
+    
+    print("🧪 Iniciando prueba de extracción del sistema médico...")
+    pairs = extract_medico_pairs_from_structured_text(test_medico_text)
+    print(f"📊 Resultado de la prueba: {len(pairs)} pares extraídos")
+    
+    for i, (diag, rec) in enumerate(pairs):
+        print(f"  {i+1}. {diag} -> {rec}")
+    
+    return pairs
+
+if __name__ == "__main__":
+    # Ejecutar prueba si se ejecuta directamente
+    test_medico_extraction()
