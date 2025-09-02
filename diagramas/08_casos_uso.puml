@@ -35,6 +35,7 @@ package "Funcionalidades de Reportes" {
     usecase "Aplicar Fuentes Personalizadas" as UC13
     usecase "Generar Múltiples Páginas" as UC14
     usecase "Extraer Diagnósticos Específicos" as UC19
+    usecase "Extraer Recomendaciones Específicas" as UC21
     usecase "Crear Tabla Comparativa" as UC20
 }
 
@@ -73,6 +74,7 @@ UC5 --> UC12 : Usa
 UC5 --> UC13 : Aplica
 UC5 --> UC14 : Crea
 UC5 --> UC19 : Incluye
+UC5 --> UC21 : Incluye
 UC5 --> UC20 : Incluye
 
 UC3 --> UC15 : Usa
@@ -90,6 +92,7 @@ UC5 <.. UC12 : <<include>>
 UC5 <.. UC13 : <<include>>
 UC5 <.. UC14 : <<include>>
 UC5 <.. UC19 : <<include>>
+UC5 <.. UC21 : <<include>>
 UC5 <.. UC20 : <<include>>
 
 ' Notas explicativas
@@ -123,7 +126,7 @@ PDF de 6 páginas:
 3. Análisis comparativo
 4. Comparación detallada
 5. Métricas de similitud
-6. Tabla comparativa de diagnósticos
+6. Tabla comparativa de diagnósticos y recomendaciones
 end note
 
 note right of UC10
@@ -140,11 +143,18 @@ Extrae diagnósticos específicos:
 - Máxima precisión en la extracción
 end note
 
+note right of UC21
+Extrae pares diagnóstico-recomendación:
+- Usa Gemini API con prompts especializados
+- Identifica pares asociados exactos del texto
+- Máxima precisión en la extracción
+end note
+
 note right of UC20
-Crea tabla comparativa:
+Crea tabla comparativa unificada:
 - Formato horizontal
 - Tres columnas: Médico, DeepSeek, Gemini
-- Comparación visual de diagnósticos
+- Cada celda muestra diagnóstico + recomendación
 end note
 
 @enduml

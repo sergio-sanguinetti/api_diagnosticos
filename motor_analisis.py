@@ -397,6 +397,62 @@ def extract_diagnoses_with_gemini(text, source_name, api_key):
         print(f"❌ Error extrayendo diagnósticos con Gemini para {source_name}: {e}")
         return []
 
+def extract_diagnosis_recommendation_pairs_with_gemini(text, source_name, api_key):
+    """Extrae pares de diagnóstico-recomendación usando Gemini API con un prompt especializado."""
+    try:
+        genai.configure(api_key=api_key)
+        model = genai.GenerativeModel('gemini-1.5-flash')
+        
+        prompt = f"""
+        **TAREA ESPECÍFICA**: Extrae pares de diagnóstico-recomendación específicos mencionados en el siguiente texto.
+        
+        **INSTRUCCIONES CRÍTICAS**:
+        1. Extrae SOLO pares donde un diagnóstico específico tiene una recomendación asociada
+        2. Formato: "DIAGNÓSTICO | RECOMENDACIÓN"
+        3. NO extraigas diagnósticos sin recomendación asociada
+        4. NO extraigas recomendaciones sin diagnóstico específico
+        5. Extrae EXACTAMENTE como aparecen mencionados en el texto
+        6. Máximo 8 pares
+        7. Si no hay pares específicos, devuelve lista vacía
+        
+        **TEXTO A ANALIZAR**:
+        {text}
+        
+        **FORMATO DE RESPUESTA REQUERIDO**:
+        Devuelve ÚNICAMENTE una lista de pares, uno por línea, sin numeración, sin explicaciones adicionales.
+        Ejemplo:
+        Hipertensión arterial | Dieta baja en sodio
+        Gastritis crónica | Evitar alimentos picantes
+        Diabetes tipo 2 | Control de glucosa regular
+        
+        Si no hay pares específicos, escribe: "Sin pares diagnóstico-recomendación"
+        """
+        
+        response = model.generate_content(prompt)
+        result = response.text.strip()
+        
+        # Procesar la respuesta
+        if "sin pares diagnóstico-recomendación" in result.lower():
+            return []
+        
+        # Dividir por líneas y procesar pares
+        pairs = []
+        for line in result.split('\n'):
+            line = line.strip()
+            if line and '|' in line:
+                parts = line.split('|', 1)
+                if len(parts) == 2:
+                    diagnosis = parts[0].strip().capitalize()
+                    recommendation = parts[1].strip().capitalize()
+                    if len(diagnosis) > 3 and len(recommendation) > 3:
+                        pairs.append((diagnosis, recommendation))
+        
+        return pairs[:8]  # Limitar a 8 pares máximo
+        
+    except Exception as e:
+        print(f"❌ Error extrayendo pares diagnóstico-recomendación con Gemini para {source_name}: {e}")
+        return []
+
 
 # ==============================================================================
 # FUNCIÓN 7: GENERACIÓN DEL INFORME PDF
@@ -452,16 +508,16 @@ class PDF(FPDF):
         self.section_title(title2)
         self.section_body(content2)
 
-    def print_diagnosis_comparison_table(self, medico_diagnoses, deepseek_diagnoses, gemini_diagnoses):
-        """Crea una tabla comparativa horizontal de diagnósticos encontrados por cada fuente."""
-        self.section_title('Tabla Comparativa de Diagnósticos Encontrados')
+    def print_diagnosis_recommendation_comparison_table(self, medico_pairs, deepseek_pairs, gemini_pairs):
+        """Crea una tabla comparativa horizontal de diagnósticos y recomendaciones encontrados por cada fuente."""
+        self.section_title('Tabla Comparativa de Diagnósticos y Recomendaciones')
         
-        # Configurar columnas
+        # Configurar columnas con mejor distribución
         col_width = (self.w - self.l_margin - self.r_margin) / 3
-        row_height = 8
+        row_height = 12  # Aumentar altura para acomodar diagnóstico + recomendación
         
         # Encabezados
-        self.set_font('DejaVu', 'B', 10)
+        self.set_font('DejaVu', 'B', 9)
         self.set_fill_color(240, 240, 240)
         self.set_text_color(0, 0, 0)
         
@@ -472,31 +528,43 @@ class PDF(FPDF):
         self.ln(row_height)
         
         # Configurar fuente para contenido
-        self.set_font('DejaVu', '', 9)
+        self.set_font('DejaVu', '', 8)
         self.set_fill_color(255, 255, 255)
         
         # Determinar el número máximo de filas
-        max_diagnoses = max(len(medico_diagnoses), len(deepseek_diagnoses), len(gemini_diagnoses))
+        max_pairs = max(len(medico_pairs), len(deepseek_pairs), len(gemini_pairs))
         
-        # Si no hay diagnósticos, mostrar mensaje
-        if max_diagnoses == 0:
-            self.cell(col_width * 3, row_height, 'No se encontraron diagnósticos específicos', 1, 0, 'C')
+        # Si no hay pares, mostrar mensaje
+        if max_pairs == 0:
+            self.cell(col_width * 3, row_height, 'No se encontraron pares diagnóstico-recomendación', 1, 0, 'C')
             self.ln(row_height)
             return
         
-        # Llenar la tabla
-        for i in range(max_diagnoses):
-            # Diagnóstico del médico
-            medico_diag = medico_diagnoses[i] if i < len(medico_diagnoses) else ""
-            self.cell(col_width, row_height, medico_diag, 1, 0, 'L')
+        # Llenar la tabla con mejor manejo de texto largo
+        for i in range(max_pairs):
+            # Par del médico
+            if i < len(medico_pairs):
+                medico_diag, medico_rec = medico_pairs[i]
+                medico_text = f"{medico_diag}\n{medico_rec}"
+            else:
+                medico_text = ""
+            self._print_cell_with_wrap(col_width, row_height, medico_text, 1, 0, 'L')
             
-            # Diagnóstico de DeepSeek
-            deepseek_diag = deepseek_diagnoses[i] if i < len(deepseek_diagnoses) else ""
-            self.cell(col_width, row_height, deepseek_diag, 1, 0, 'L')
+            # Par de DeepSeek
+            if i < len(deepseek_pairs):
+                deepseek_diag, deepseek_rec = deepseek_pairs[i]
+                deepseek_text = f"{deepseek_diag}\n{deepseek_rec}"
+            else:
+                deepseek_text = ""
+            self._print_cell_with_wrap(col_width, row_height, deepseek_text, 1, 0, 'L')
             
-            # Diagnóstico de Gemini
-            gemini_diag = gemini_diagnoses[i] if i < len(gemini_diagnoses) else ""
-            self.cell(col_width, row_height, gemini_diag, 1, 0, 'L')
+            # Par de Gemini
+            if i < len(gemini_pairs):
+                gemini_diag, gemini_rec = gemini_pairs[i]
+                gemini_text = f"{gemini_diag}\n{gemini_rec}"
+            else:
+                gemini_text = ""
+            self._print_cell_with_wrap(col_width, row_height, gemini_text, 1, 0, 'L')
             
             self.ln(row_height)
         
@@ -504,10 +572,20 @@ class PDF(FPDF):
         self.ln(5)
         self.set_font('DejaVu', '', 8)
         self.set_text_color(100, 100, 100)
-        note_text = "Esta tabla muestra los diagnósticos específicos extraídos de cada fuente. " \
-                   "Los diagnósticos se extraen usando Gemini API con prompts especializados para mayor precisión."
+        note_text = "Esta tabla muestra los pares de diagnóstico-recomendación extraídos de cada fuente. " \
+                   "Los pares se extraen usando Gemini API con prompts especializados para mayor precisión."
         self.multi_cell(0, 4, note_text)
         self.ln(5)
+
+    def _print_cell_with_wrap(self, w, h, txt, border, ln, align):
+        """Imprime una celda con ajuste automático de texto para evitar desbordamiento."""
+        # Si el texto es muy largo, lo truncamos y agregamos "..."
+        max_chars = int(w / 2.5)  # Aproximadamente 2.5mm por carácter
+        
+        if len(txt) > max_chars:
+            txt = txt[:max_chars-3] + "..."
+        
+        self.cell(w, h, txt, border, ln, align)
 
 def generate_pdf_in_memory(token, medico, deepseek, gemini, summary, comparison,metrics):
     """Genera un PDF profesional multi-página en memoria."""
@@ -570,15 +648,15 @@ def generate_pdf_in_memory(token, medico, deepseek, gemini, summary, comparison,
     pdf.ln(2)
     pdf.section_body(metric_text_gm, is_metric=True)
 
-    # --- PÁGINA 6: TABLA COMPARATIVA DE DIAGNÓSTICOS ---
+    # --- PÁGINA 6: TABLA COMPARATIVA DE DIAGNÓSTICOS Y RECOMENDACIONES ---
     pdf.add_page()
     
-    # Extraer diagnósticos de cada fuente usando Gemini API para mayor precisión
-    medico_diagnoses = extract_diagnoses_with_gemini(medico, "Médico", GOOGLE_API_KEY)
-    deepseek_diagnoses = extract_diagnoses_with_gemini(deepseek, "DeepSeek", GOOGLE_API_KEY)
-    gemini_diagnoses = extract_diagnoses_with_gemini(gemini, "Gemini", GOOGLE_API_KEY)
+    # Extraer pares de diagnóstico-recomendación de cada fuente usando Gemini API para mayor precisión
+    medico_pairs = extract_diagnosis_recommendation_pairs_with_gemini(medico, "Médico", GOOGLE_API_KEY)
+    deepseek_pairs = extract_diagnosis_recommendation_pairs_with_gemini(deepseek, "DeepSeek", GOOGLE_API_KEY)
+    gemini_pairs = extract_diagnosis_recommendation_pairs_with_gemini(gemini, "Gemini", GOOGLE_API_KEY)
     
-    # Crear la tabla comparativa
-    pdf.print_diagnosis_comparison_table(medico_diagnoses, deepseek_diagnoses, gemini_diagnoses)
+    # Crear la tabla comparativa unificada
+    pdf.print_diagnosis_recommendation_comparison_table(medico_pairs, deepseek_pairs, gemini_pairs)
 
     return pdf.output()
