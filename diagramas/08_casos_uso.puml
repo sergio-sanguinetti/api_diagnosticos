@@ -135,9 +135,9 @@ end note
 
 note right of UC19
 Extrae diagnósticos específicos:
-- Usa patrones de búsqueda médica
-- Identifica condiciones específicas
-- Limita a diagnósticos relevantes
+- Usa Gemini API con prompts especializados
+- Identifica diagnósticos exactos del texto
+- Máxima precisión en la extracción
 end note
 
 note right of UC20

@@ -170,7 +170,7 @@ python analizador_ia.py
 ### Generación de Reportes
 - **PDFs Profesionales**: Informes estructurados y formateados
 - **Múltiples Secciones**: Datos del paciente, hallazgos, análisis y comparaciones
-- **Tabla Comparativa de Diagnósticos**: Comparación horizontal de diagnósticos encontrados por médico, DeepSeek y Gemini
+- **Tabla Comparativa de Diagnósticos**: Comparación horizontal de diagnósticos encontrados por médico, DeepSeek y Gemini (extraídos con Gemini API para máxima precisión)
 - **Fuentes Personalizadas**: Soporte para caracteres especiales
 
 ## 🔒 Seguridad y Consideraciones

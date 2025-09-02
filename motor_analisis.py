@@ -343,65 +343,59 @@ def calculate_semantic_similarity(text_medico, text_ia):
         print(f"❌ Error calculando la similitud: {e}")
         return 0.0
 
-def extract_diagnoses_from_text(text, source_name):
-    """Extrae diagnósticos específicos de un texto usando patrones de búsqueda."""
-    diagnoses = []
-    
-    # Patrones comunes de diagnósticos médicos
-    diagnosis_patterns = [
-        r'(?:diagnóstico|diagnostico|diagnosticado|diagnosticada)[:\s]*([^.\n]+)',
-        r'(?:encontrado|encontrada|hallado|hallada|detectado|detectada)[:\s]*([^.\n]+)',
-        r'(?:presenta|presenta|tiene|sufre de)[:\s]*([^.\n]+)',
-        r'(?:hipertensión|hipertension|presión alta|presion alta)',
-        r'(?:gastritis|úlcera|ulcera|reflujo)',
-        r'(?:diabetes|diabético|diabetica)',
-        r'(?:colesterol alto|hipercolesterolemia)',
-        r'(?:triglicéridos altos|trigliceridos altos|hipertrigliceridemia)',
-        r'(?:anemia|hemoglobina baja)',
-        r'(?:obesidad|sobrepeso|índice de masa corporal alto)',
-        r'(?:asma|bronquitis|enfermedad pulmonar)',
-        r'(?:artritis|artrosis|dolor articular)',
-        r'(?:depresión|depresion|ansiedad)',
-        r'(?:migraña|migrana|cefalea)',
-        r'(?:insomnio|trastorno del sueño)',
-        r'(?:alergia|alérgico|alergica)',
-        r'(?:infección|infeccion|bacteriana|viral)',
-        r'(?:inflamación|inflamacion|inflamatorio)',
-        r'(?:tumor|masa|quiste)',
-        r'(?:fractura|lesión|lesion)'
-    ]
-    
-    text_lower = text.lower()
-    
-    for pattern in diagnosis_patterns:
-        matches = re.findall(pattern, text_lower, re.IGNORECASE)
-        for match in matches:
-            if isinstance(match, tuple):
-                match = match[0] if match[0] else match[1]
-            
-            # Limpiar y formatear el diagnóstico
-            diagnosis = match.strip()
-            if len(diagnosis) > 3 and len(diagnosis) < 100:  # Filtrar diagnósticos muy cortos o muy largos
+def extract_diagnoses_with_gemini(text, source_name, api_key):
+    """Extrae diagnósticos específicos usando Gemini API con un prompt especializado."""
+    try:
+        genai.configure(api_key=api_key)
+        model = genai.GenerativeModel('gemini-1.5-flash')
+        
+        prompt = f"""
+        **TAREA ESPECÍFICA**: Extrae ÚNICAMENTE los diagnósticos médicos específicos mencionados en el siguiente texto.
+        
+        **INSTRUCCIONES CRÍTICAS**:
+        1. Extrae SOLO diagnósticos médicos específicos (ej: "Hipertensión", "Gastritis", "Diabetes tipo 2")
+        2. NO extraigas síntomas generales como "dolor", "fatiga", "síntomas"
+        3. NO extraigas recomendaciones o tratamientos
+        4. NO extraigas valores de laboratorio aislados
+        5. Extrae EXACTAMENTE como aparecen mencionados en el texto
+        6. Máximo 8 diagnósticos
+        7. Si no hay diagnósticos específicos, devuelve lista vacía
+        
+        **TEXTO A ANALIZAR**:
+        {text}
+        
+        **FORMATO DE RESPUESTA REQUERIDO**:
+        Devuelve ÚNICAMENTE una lista de diagnósticos, uno por línea, sin numeración, sin explicaciones adicionales.
+        Ejemplo:
+        Hipertensión arterial
+        Gastritis crónica
+        Diabetes tipo 2
+        
+        Si no hay diagnósticos específicos, escribe: "Sin diagnósticos específicos"
+        """
+        
+        response = model.generate_content(prompt)
+        result = response.text.strip()
+        
+        # Procesar la respuesta
+        if "sin diagnósticos específicos" in result.lower():
+            return []
+        
+        # Dividir por líneas y limpiar
+        diagnoses = []
+        for line in result.split('\n'):
+            line = line.strip()
+            if line and len(line) > 3 and len(line) < 100:
                 # Capitalizar primera letra
-                diagnosis = diagnosis.capitalize()
-                if diagnosis not in diagnoses:
-                    diagnoses.append(diagnosis)
-    
-    # Si no se encontraron diagnósticos con patrones, buscar en secciones específicas
-    if not diagnoses:
-        # Buscar en secciones de hallazgos o diagnósticos
-        if "hallazgos" in text_lower:
-            hallazgos_section = re.search(r'hallazgos[:\s]*(.*?)(?:\n\n|\n###|$)', text, re.DOTALL | re.IGNORECASE)
-            if hallazgos_section:
-                hallazgos_text = hallazgos_section.group(1)
-                # Extraer elementos de lista
-                list_items = re.findall(r'[-•]\s*([^.\n]+)', hallazgos_text)
-                for item in list_items[:5]:  # Limitar a 5 diagnósticos
-                    item = item.strip().capitalize()
-                    if len(item) > 3 and item not in diagnoses:
-                        diagnoses.append(item)
-    
-    return diagnoses[:8]  # Limitar a 8 diagnósticos máximo
+                line = line.capitalize()
+                if line not in diagnoses:
+                    diagnoses.append(line)
+        
+        return diagnoses[:8]  # Limitar a 8 diagnósticos máximo
+        
+    except Exception as e:
+        print(f"❌ Error extrayendo diagnósticos con Gemini para {source_name}: {e}")
+        return []
 
 
 # ==============================================================================
@@ -511,7 +505,7 @@ class PDF(FPDF):
         self.set_font('DejaVu', '', 8)
         self.set_text_color(100, 100, 100)
         note_text = "Esta tabla muestra los diagnósticos específicos extraídos de cada fuente. " \
-                   "Los diagnósticos se extraen automáticamente usando patrones de búsqueda médica."
+                   "Los diagnósticos se extraen usando Gemini API con prompts especializados para mayor precisión."
         self.multi_cell(0, 4, note_text)
         self.ln(5)
 
@@ -579,10 +573,10 @@ def generate_pdf_in_memory(token, medico, deepseek, gemini, summary, comparison,
     # --- PÁGINA 6: TABLA COMPARATIVA DE DIAGNÓSTICOS ---
     pdf.add_page()
     
-    # Extraer diagnósticos de cada fuente
-    medico_diagnoses = extract_diagnoses_from_text(medico, "Médico")
-    deepseek_diagnoses = extract_diagnoses_from_text(deepseek, "DeepSeek")
-    gemini_diagnoses = extract_diagnoses_from_text(gemini, "Gemini")
+    # Extraer diagnósticos de cada fuente usando Gemini API para mayor precisión
+    medico_diagnoses = extract_diagnoses_with_gemini(medico, "Médico", GOOGLE_API_KEY)
+    deepseek_diagnoses = extract_diagnoses_with_gemini(deepseek, "DeepSeek", GOOGLE_API_KEY)
+    gemini_diagnoses = extract_diagnoses_with_gemini(gemini, "Gemini", GOOGLE_API_KEY)
     
     # Crear la tabla comparativa
     pdf.print_diagnosis_comparison_table(medico_diagnoses, deepseek_diagnoses, gemini_diagnoses)
