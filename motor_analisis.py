@@ -465,18 +465,18 @@ def extract_diagnosis_recommendation_pairs_with_gemini(text, source_name, api_ke
         genai.configure(api_key=api_key)
         model = genai.GenerativeModel('gemini-1.5-flash')
         
-        prompt = f"""
-                    **TAREA ESPECÍFICA**: Extrae ÚNICAMENTE pares de diagnóstico-recomendación específicos mencionados en el siguiente texto.
+                            prompt = f"""
+                    **TAREA ESPECÍFICA**: Extrae pares de diagnóstico-recomendación específicos mencionados en el siguiente texto.
                     
                     **INSTRUCCIONES CRÍTICAS**:
-                    1. Extrae SOLO pares donde un diagnóstico médico específico tiene una recomendación clara asociada
+                    1. Extrae pares donde un diagnóstico médico específico tiene una recomendación clara asociada
                     2. Formato: "DIAGNÓSTICO | RECOMENDACIÓN"
-                    3. NO extraigas diagnósticos sin recomendación asociada
+                    3. Si hay diagnósticos sin recomendación específica, inclúyelos como: "DIAGNÓSTICO | Sin recomendación específica"
                     4. NO extraigas recomendaciones sin diagnóstico específico
-                    5. NO extraigas recomendaciones sueltas o generales
-                    6. Extrae EXACTAMENTE como aparecen mencionados en el texto
-                    7. Máximo 6 pares
-                    8. Si no hay pares específicos, devuelve lista vacía
+                    5. Extrae EXACTAMENTE como aparecen mencionados en el texto
+                    6. Máximo 6 pares
+                    7. Mantén diagnósticos y recomendaciones cortos y claros
+                    8. Si no hay diagnósticos, devuelve lista vacía
                     
                     **TEXTO A ANALIZAR**:
                     {text}
@@ -486,16 +486,16 @@ def extract_diagnosis_recommendation_pairs_with_gemini(text, source_name, api_ke
                     Ejemplo:
                     Hipertensión arterial | Dieta baja en sodio
                     Gastritis crónica | Evitar alimentos picantes
-                    Diabetes tipo 2 | Control de glucosa regular
+                    Diabetes tipo 2 | Sin recomendación específica
                     
-                    Si no hay pares específicos, escribe: "Sin pares diagnóstico-recomendación"
+                    Si no hay diagnósticos, escribe: "Sin diagnósticos encontrados"
                     """
         
         response = model.generate_content(prompt)
         result = response.text.strip()
         
         # Procesar la respuesta
-        if "sin pares diagnóstico-recomendación" in result.lower():
+        if "sin diagnósticos encontrados" in result.lower() or "sin pares diagnóstico-recomendación" in result.lower():
             return []
         
         # Dividir por líneas y procesar pares
@@ -507,10 +507,16 @@ def extract_diagnosis_recommendation_pairs_with_gemini(text, source_name, api_ke
                 if len(parts) == 2:
                     diagnosis = parts[0].strip().capitalize()
                     recommendation = parts[1].strip().capitalize()
-                    if len(diagnosis) > 3 and len(recommendation) > 3:
+                    
+                    # Validar que el diagnóstico tenga al menos 3 caracteres
+                    if len(diagnosis) > 3:
+                        # Si la recomendación es muy corta o es "sin recomendación específica", usar texto por defecto
+                        if len(recommendation) < 5 or "sin recomendación específica" in recommendation.lower():
+                            recommendation = "Evaluación médica recomendada"
+                        
                         pairs.append((diagnosis, recommendation))
         
-        return pairs[:8]  # Limitar a 8 pares máximo
+        return pairs[:6]  # Limitar a 6 pares máximo
         
     except Exception as e:
         print(f"❌ Error extrayendo pares diagnóstico-recomendación con Gemini para {source_name}: {e}")
