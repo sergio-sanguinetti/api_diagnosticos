@@ -465,30 +465,31 @@ def extract_diagnosis_recommendation_pairs_with_gemini(text, source_name, api_ke
         genai.configure(api_key=api_key)
         model = genai.GenerativeModel('gemini-1.5-flash')
         
-        prompt = f"""
-        **TAREA ESPECÍFICA**: Extrae pares de diagnóstico-recomendación específicos mencionados en el siguiente texto.
-        
-        **INSTRUCCIONES CRÍTICAS**:
-        1. Extrae SOLO pares donde un diagnóstico específico tiene una recomendación asociada
-        2. Formato: "DIAGNÓSTICO | RECOMENDACIÓN"
-        3. NO extraigas diagnósticos sin recomendación asociada
-        4. NO extraigas recomendaciones sin diagnóstico específico
-        5. Extrae EXACTAMENTE como aparecen mencionados en el texto
-        6. Máximo 8 pares
-        7. Si no hay pares específicos, devuelve lista vacía
-        
-        **TEXTO A ANALIZAR**:
-        {text}
-        
-        **FORMATO DE RESPUESTA REQUERIDO**:
-        Devuelve ÚNICAMENTE una lista de pares, uno por línea, sin numeración, sin explicaciones adicionales.
-        Ejemplo:
-        Hipertensión arterial | Dieta baja en sodio
-        Gastritis crónica | Evitar alimentos picantes
-        Diabetes tipo 2 | Control de glucosa regular
-        
-        Si no hay pares específicos, escribe: "Sin pares diagnóstico-recomendación"
-        """
+                            prompt = f"""
+                    **TAREA ESPECÍFICA**: Extrae ÚNICAMENTE pares de diagnóstico-recomendación específicos mencionados en el siguiente texto.
+                    
+                    **INSTRUCCIONES CRÍTICAS**:
+                    1. Extrae SOLO pares donde un diagnóstico médico específico tiene una recomendación clara asociada
+                    2. Formato: "DIAGNÓSTICO | RECOMENDACIÓN"
+                    3. NO extraigas diagnósticos sin recomendación asociada
+                    4. NO extraigas recomendaciones sin diagnóstico específico
+                    5. NO extraigas recomendaciones sueltas o generales
+                    6. Extrae EXACTAMENTE como aparecen mencionados en el texto
+                    7. Máximo 6 pares
+                    8. Si no hay pares específicos, devuelve lista vacía
+                    
+                    **TEXTO A ANALIZAR**:
+                    {text}
+                    
+                    **FORMATO DE RESPUESTA REQUERIDO**:
+                    Devuelve ÚNICAMENTE una lista de pares, uno por línea, sin numeración, sin explicaciones adicionales.
+                    Ejemplo:
+                    Hipertensión arterial | Dieta baja en sodio
+                    Gastritis crónica | Evitar alimentos picantes
+                    Diabetes tipo 2 | Control de glucosa regular
+                    
+                    Si no hay pares específicos, escribe: "Sin pares diagnóstico-recomendación"
+                    """
         
         response = model.generate_content(prompt)
         result = response.text.strip()
@@ -637,19 +638,27 @@ class PDF(FPDF):
                 if text and '\n' in text:
                     lines = text.split('\n')
                     if len(lines) >= 2:
-                        # Altura para diagnóstico (negrita, 3.5mm) + recomendación (normal, 3mm) + márgenes
-                        text_height = 3.5 + 3 + 4  # +4 para márgenes internos
+                        # Calcular líneas necesarias para cada parte
+                        diag_lines = max(1, len(lines[0]) // 25)  # Aproximadamente 25 caracteres por línea
+                        rec_lines = max(1, len(lines[1]) // 25)
+                        
+                        # Altura total: diagnóstico + recomendación + separación
+                        text_height = (diag_lines * 3.5) + (rec_lines * 3) + 2 + 4  # +2 separación, +4 márgenes
                     else:
-                        text_height = 3.5 + 4  # Una línea + márgenes
+                        # Una línea de diagnóstico
+                        diag_lines = max(1, len(text) // 25)
+                        text_height = (diag_lines * 3.5) + 4  # +4 márgenes
                 elif text:
-                    text_height = 3.5 + 4  # Una línea + márgenes
+                    # Una línea de diagnóstico
+                    diag_lines = max(1, len(text) // 25)
+                    text_height = (diag_lines * 3.5) + 4  # +4 márgenes
                 else:
                     text_height = 8  # Altura mínima para celda vacía
                 
                 max_height = max(max_height, text_height)
             
             # Asegurar altura mínima
-            row_height = max(max_height, 12)  # Mínimo 12mm para diagnóstico + recomendación
+            row_height = max(max_height, 15)  # Mínimo 15mm para diagnóstico + recomendación
             
             # Imprimir las celdas de esta fila con colores
             self._print_cell_with_wrap(col_width, row_height, medico_text, 1, 0, 'L', medico_color)
@@ -698,12 +707,12 @@ class PDF(FPDF):
                 self.set_font('DejaVu', '', 7)
                 self.multi_cell(w - 4, 3, lines[1].strip(), 0, align)
             else:
-                # Si solo hay una línea, mostrarla normal
-                self.set_font('DejaVu', '', 8)
+                # Si solo hay una línea, mostrarla en negrita (es un diagnóstico)
+                self.set_font('DejaVu', 'B', 8)
                 self.multi_cell(w - 4, 3.5, txt, 0, align)
         else:
-            # Texto simple sin separación
-            self.set_font('DejaVu', '', 8)
+            # Texto simple sin separación - asumir que es un diagnóstico
+            self.set_font('DejaVu', 'B', 8)
             self.multi_cell(w - 4, 3.5, txt, 0, align)
         
         # Restaurar color de fondo a blanco
