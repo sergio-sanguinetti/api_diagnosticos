@@ -307,78 +307,115 @@ def compare_ai_analyses(deepseek_analysis, gemini_analysis, api_key):
 # MÉTRICAS 
 # ==============================================================================
 def calculate_semantic_similarity(text_medico, text_ia):
-    """Calcula la similitud de coseno usando la API de Inferencia de Hugging Face con circuit breaker."""
-    # Circuit breaker: si no hay API key, retornar 0 inmediatamente
-    if not HUGGINGFACE_API_KEY:
-        print("⚠️ No se encontró la clave de API de Hugging Face en las variables de entorno.")
-        return 0.0
-
-    # Circuit breaker: verificar si el servicio está disponible (timeout muy corto)
+    """Calcula la similitud semántica usando la API de DeepSeek."""
     try:
-        # Verificar conectividad con un timeout muy corto
-        test_response = requests.get("https://api-inference.huggingface.co/status", timeout=5)
-        if test_response.status_code != 200:
-            print("⚠️ API de Hugging Face no disponible, saltando similitud semántica")
-            return 0.0
-    except:
-        print("⚠️ No se puede conectar a Hugging Face, saltando similitud semántica")
-        return 0.0
-
-    try:
+        print("🔄 Calculando similitud semántica con DeepSeek...")
+        
+        # Extraer contenido médico
         medico_content_match = re.search(r'SECCION_REPORTE_COMPLETO\n(.*?)\nSECCION_FIN', text_medico, re.DOTALL)
         if not medico_content_match:
             print("❌ No se encontró SECCION_REPORTE_COMPLETO en el texto del médico.")
             return 0.0
         medico_content = medico_content_match.group(1).strip()
         
-        # Limitar el contenido más agresivamente para evitar requests muy grandes
-        if len(medico_content) > 1000:  # Reducido de 2000 a 1000
-            medico_content = medico_content[:1000] + "..."
-        if len(text_ia) > 1000:  # Reducido de 2000 a 1000
-            text_ia = text_ia[:1000] + "..."
+        # Limitar el contenido para evitar requests muy grandes
+        if len(medico_content) > 1500:
+            medico_content = medico_content[:1500] + "..."
+        if len(text_ia) > 1500:
+            text_ia = text_ia[:1500] + "..."
         
-        headers = {"Authorization": f"Bearer {HUGGINGFACE_API_KEY}"}
+        # Crear prompt para DeepSeek
+        prompt = f"""
+        **TAREA**: Calcula la similitud semántica entre dos análisis médicos.
         
-        # --- PAYLOAD CORREGIDO PARA LA API ---
+        **ANÁLISIS MÉDICO ORIGINAL**:
+        {medico_content}
+        
+        **ANÁLISIS DE IA**:
+        {text_ia}
+        
+        **INSTRUCCIONES**:
+        1. Compara ambos análisis en términos de:
+           - Diagnósticos mencionados
+           - Recomendaciones sugeridas
+           - Hallazgos clave identificados
+           - Coherencia médica general
+        
+        2. Evalúa qué tan similares son en contenido y enfoque médico
+        
+        3. Devuelve ÚNICAMENTE un número decimal entre 0.0 y 1.0 donde:
+           - 0.0 = Completamente diferentes
+           - 0.5 = Moderadamente similares
+           - 1.0 = Completamente similares
+        
+        **FORMATO DE RESPUESTA**: Solo el número decimal, sin explicaciones adicionales.
+        Ejemplo: 0.75
+        """
+        
+        # Configurar request a DeepSeek
+        url = "https://api.deepseek.com/chat/completions"
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {DEEPSEEK_API_KEY}"
+        }
         payload = {
-            "inputs": {
-                "source_sentence": medico_content,
-                "sentences": [
-                    text_ia
-                ]
-            },
-            "options": {"wait_for_model": True}
+            "model": "deepseek-chat",
+            "messages": [
+                {
+                    "role": "system", 
+                    "content": "Eres un experto en análisis médico que calcula similitudes entre diagnósticos. Responde solo con números decimales entre 0.0 y 1.0."
+                },
+                {
+                    "role": "user", 
+                    "content": prompt
+                }
+            ],
+            "temperature": 0.1,  # Baja temperatura para respuestas más consistentes
+            "max_tokens": 10     # Solo necesitamos un número
         }
         
-        # Timeout muy agresivo para evitar colgar el worker
-        timeout = 10  # Reducido de 30 a 10 segundos
-        max_retries = 1  # Solo un intento para evitar demoras
-        
+        # Hacer request con timeout corto
+        timeout = 15  # 15 segundos máximo
         try:
-            print(f"🔄 Calculando similitud semántica (timeout: {timeout}s)...")
-            response = requests.post(HF_EMBEDDING_MODEL_URL, headers=headers, json=payload, timeout=timeout)
-            response.raise_for_status() 
+            print(f"🔄 Enviando request a DeepSeek (timeout: {timeout}s)...")
+            response = requests.post(url, headers=headers, json=payload, timeout=timeout)
+            response.raise_for_status()
             
-            similarity_scores = response.json()
+            result = response.json()
             
-            # La API devuelve una lista de puntajes, tomamos el primero
-            if not isinstance(similarity_scores, list) or len(similarity_scores) == 0:
-                print(f"❌ Respuesta de similitud inesperada de la API de Hugging Face: {similarity_scores}")
+            # Extraer el contenido de la respuesta
+            if 'choices' in result and len(result['choices']) > 0:
+                similarity_text = result['choices'][0]['message']['content'].strip()
+                
+                # Limpiar y convertir a float
+                similarity_text = re.sub(r'[^\d.]', '', similarity_text)  # Solo números y puntos
+                
+                if similarity_text:
+                    similarity_score = float(similarity_text)
+                    # Asegurar que esté en el rango [0, 1]
+                    similarity_score = max(0.0, min(1.0, similarity_score))
+                    
+                    print(f"✅ Similitud semántica calculada con DeepSeek: {similarity_score:.4f}")
+                    return similarity_score
+                else:
+                    print("❌ Respuesta de DeepSeek no contiene número válido")
+                    return 0.0
+            else:
+                print("❌ Respuesta inesperada de DeepSeek")
                 return 0.0
-
-            result = float(similarity_scores[0])
-            print(f"✅ Similitud semántica calculada: {result:.4f}")
-            return result
-            
+                
         except requests.exceptions.Timeout:
-            print(f"⏰ Timeout en similitud semántica ({timeout}s), usando valor por defecto")
+            print(f"⏰ Timeout en DeepSeek ({timeout}s), usando valor por defecto")
             return 0.0
         except requests.exceptions.RequestException as e:
-            print(f"❌ Error de red en similitud semántica: {e}")
+            print(f"❌ Error de red con DeepSeek: {e}")
+            return 0.0
+        except ValueError as e:
+            print(f"❌ Error convirtiendo respuesta de DeepSeek: {e}")
             return 0.0
 
     except Exception as e:
-        print(f"❌ Error inesperado calculando la similitud: {e}")
+        print(f"❌ Error inesperado calculando similitud semántica: {e}")
         return 0.0
 
 def calculate_kappa_cohen(text_medico, text_ia):
