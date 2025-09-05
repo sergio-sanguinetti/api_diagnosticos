@@ -959,20 +959,29 @@ class PDF(FPDF):
         def normalize_diagnosis(diag):
             """Normaliza diagnósticos para agrupar similares"""
             diag_lower = diag.lower()
-            if 'hipertrigliceridemia' in diag_lower or 'trigliceridemia' in diag_lower:
+            if 'hipertrigliceridemia' in diag_lower or 'trigliceridemia' in diag_lower or 'dislipidemia' in diag_lower:
                 return 'HIPERTRIGLICERIDEMIA'
             elif 'hiperlipidemia' in diag_lower or 'colesterol' in diag_lower or 'ldl' in diag_lower:
                 return 'HIPERLIPIDEMIA'
             elif 'policitemia' in diag_lower:
                 return 'POLICITEMIA'
-            elif 'sobrepeso' in diag_lower or 'obesidad' in diag_lower:
+            elif 'sobrepeso' in diag_lower or 'obesidad' in diag_lower or 'imc' in diag_lower:
                 return 'SOBREPESO'
-            elif 'bradicardia' in diag_lower:
+            elif 'bradicardia' in diag_lower or 'cardiaco' in diag_lower:
                 return 'BRADICARDIA'
             elif 'hdl' in diag_lower or 'deficiencia' in diag_lower:
                 return 'DEFICIENCIA_HDL'
+            elif 'diabetes' in diag_lower or 'glucosa' in diag_lower:
+                return 'DIABETES'
+            elif 'hipertensión' in diag_lower or 'presión' in diag_lower:
+                return 'HIPERTENSIÓN'
+            elif 'anemia' in diag_lower or 'hemoglobina' in diag_lower:
+                return 'ANEMIA'
+            elif 'gastritis' in diag_lower or 'gástrico' in diag_lower:
+                return 'GASTRITIS'
             else:
-                return diag.upper()
+                # Para diagnósticos únicos, usar el nombre original pero normalizado
+                return diag.upper().strip()
         
         # Organizar diagnósticos por categorías
         organized_diagnoses = {}
@@ -997,6 +1006,26 @@ class PDF(FPDF):
             if norm_diag not in organized_diagnoses:
                 organized_diagnoses[norm_diag] = {'medico': [], 'deepseek': [], 'gemini': []}
             organized_diagnoses[norm_diag]['gemini'].append((diag, rec))
+        
+        # Agregar diagnósticos únicos de las IAs que no están en el sistema médico
+        # Crear un conjunto de diagnósticos del médico para comparar
+        medico_diagnoses = set()
+        for diag, rec in medico_pairs:
+            medico_diagnoses.add(normalize_diagnosis(diag))
+        
+        # Agregar diagnósticos únicos de DeepSeek
+        for diag, rec in deepseek_pairs:
+            norm_diag = normalize_diagnosis(diag)
+            if norm_diag not in medico_diagnoses and norm_diag not in organized_diagnoses:
+                organized_diagnoses[norm_diag] = {'medico': [], 'deepseek': [], 'gemini': []}
+                organized_diagnoses[norm_diag]['deepseek'].append((diag, rec))
+        
+        # Agregar diagnósticos únicos de Gemini
+        for diag, rec in gemini_pairs:
+            norm_diag = normalize_diagnosis(diag)
+            if norm_diag not in medico_diagnoses and norm_diag not in organized_diagnoses:
+                organized_diagnoses[norm_diag] = {'medico': [], 'deepseek': [], 'gemini': []}
+                organized_diagnoses[norm_diag]['gemini'].append((diag, rec))
         
         # Si no hay diagnósticos organizados, mostrar mensaje
         if not organized_diagnoses:
