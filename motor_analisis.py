@@ -938,7 +938,7 @@ class PDF(FPDF):
         
         # Configurar columnas con mejor distribución para página horizontal
         col_width = (self.w - self.l_margin - self.r_margin) / 3
-        base_row_height = 8  # Altura base por línea de texto
+        base_row_height = 6  # Altura base por línea de texto
         
         # Encabezados
         self.set_font('DejaVu', 'B', 10)
@@ -952,58 +952,102 @@ class PDF(FPDF):
         self.ln(base_row_height * 2)
         
         # Configurar fuente para contenido
-        self.set_font('DejaVu', '', 9)
+        self.set_font('DejaVu', '', 8)
         self.set_fill_color(255, 255, 255)
         
-        # Determinar el número máximo de filas
-        max_pairs = max(len(medico_pairs), len(deepseek_pairs), len(gemini_pairs))
+        # Crear diccionarios para organizar diagnósticos por similitud
+        def normalize_diagnosis(diag):
+            """Normaliza diagnósticos para agrupar similares"""
+            diag_lower = diag.lower()
+            if 'hipertrigliceridemia' in diag_lower or 'trigliceridemia' in diag_lower:
+                return 'HIPERTRIGLICERIDEMIA'
+            elif 'hiperlipidemia' in diag_lower or 'colesterol' in diag_lower or 'ldl' in diag_lower:
+                return 'HIPERLIPIDEMIA'
+            elif 'policitemia' in diag_lower:
+                return 'POLICITEMIA'
+            elif 'sobrepeso' in diag_lower or 'obesidad' in diag_lower:
+                return 'SOBREPESO'
+            elif 'bradicardia' in diag_lower:
+                return 'BRADICARDIA'
+            elif 'hdl' in diag_lower or 'deficiencia' in diag_lower:
+                return 'DEFICIENCIA_HDL'
+            else:
+                return diag.upper()
         
-        # Si no hay pares, mostrar mensaje
-        if max_pairs == 0:
+        # Organizar diagnósticos por categorías
+        organized_diagnoses = {}
+        
+        # Procesar diagnósticos del médico
+        for diag, rec in medico_pairs:
+            norm_diag = normalize_diagnosis(diag)
+            if norm_diag not in organized_diagnoses:
+                organized_diagnoses[norm_diag] = {'medico': [], 'deepseek': [], 'gemini': []}
+            organized_diagnoses[norm_diag]['medico'].append((diag, rec))
+        
+        # Procesar diagnósticos de DeepSeek
+        for diag, rec in deepseek_pairs:
+            norm_diag = normalize_diagnosis(diag)
+            if norm_diag not in organized_diagnoses:
+                organized_diagnoses[norm_diag] = {'medico': [], 'deepseek': [], 'gemini': []}
+            organized_diagnoses[norm_diag]['deepseek'].append((diag, rec))
+        
+        # Procesar diagnósticos de Gemini
+        for diag, rec in gemini_pairs:
+            norm_diag = normalize_diagnosis(diag)
+            if norm_diag not in organized_diagnoses:
+                organized_diagnoses[norm_diag] = {'medico': [], 'deepseek': [], 'gemini': []}
+            organized_diagnoses[norm_diag]['gemini'].append((diag, rec))
+        
+        # Si no hay diagnósticos organizados, mostrar mensaje
+        if not organized_diagnoses:
             self.cell(col_width * 3, base_row_height * 2, 'No se encontraron pares diagnóstico-recomendación', 1, 0, 'C')
             self.ln(base_row_height * 2)
             return
         
-        # Llenar la tabla con mejor manejo de texto largo
-        for i in range(max_pairs):
-            # Preparar textos para cada columna
-            medico_text = ""
-            deepseek_text = ""
-            gemini_text = ""
-            
-            if i < len(medico_pairs):
-                medico_diag, medico_rec = medico_pairs[i]
-                medico_text = f"{medico_diag}\n{medico_rec}"
-            
-            if i < len(deepseek_pairs):
-                deepseek_diag, deepseek_rec = deepseek_pairs[i]
-                deepseek_text = f"{deepseek_diag}\n{deepseek_rec}"
-            
-            if i < len(gemini_pairs):
-                gemini_diag, gemini_rec = gemini_pairs[i]
-                gemini_text = f"{gemini_diag}\n{gemini_rec}"
-            
-            # Calcular la altura máxima necesaria para esta fila
-            # Considerar que diagnóstico es más alto (4mm) y recomendación más compacta (3.5mm)
+        # Imprimir tabla organizada
+        for norm_diag, sources in organized_diagnoses.items():
+            # Calcular altura máxima para esta fila
             max_height = 0
             
+            # Preparar textos para cada columna
+            medico_texts = []
+            deepseek_texts = []
+            gemini_texts = []
+            
+            # Procesar médico
+            if sources['medico']:
+                for diag, rec in sources['medico']:
+                    medico_texts.append(f"• {diag}\n  → {rec}")
+            else:
+                medico_texts.append("Sin diagnóstico")
+            
+            # Procesar DeepSeek
+            if sources['deepseek']:
+                for diag, rec in sources['deepseek']:
+                    deepseek_texts.append(f"• {diag}\n  → {rec}")
+            else:
+                deepseek_texts.append("Sin diagnóstico")
+            
+            # Procesar Gemini
+            if sources['gemini']:
+                for diag, rec in sources['gemini']:
+                    gemini_texts.append(f"• {diag}\n  → {rec}")
+            else:
+                gemini_texts.append("Sin diagnóstico")
+            
+            # Unir textos de cada columna
+            medico_text = "\n\n".join(medico_texts)
+            deepseek_text = "\n\n".join(deepseek_texts)
+            gemini_text = "\n\n".join(gemini_texts)
+            
+            # Calcular altura necesaria
             for text in [medico_text, deepseek_text, gemini_text]:
-                if text and '\n' in text:
-                    lines = text.split('\n')
-                    if len(lines) >= 2:
-                        # Altura para diagnóstico (negrita, 4mm) + recomendación (normal, 3.5mm)
-                        text_height = 4 + 3.5 + 2  # +2 para separación
-                    else:
-                        text_height = 4 + 2  # Una línea + margen
-                elif text:
-                    text_height = 4 + 2  # Una línea + margen
-                else:
-                    text_height = 8  # Altura mínima para celda vacía
-                
+                lines = text.count('\n') + 1
+                text_height = lines * base_row_height + 4  # +4 para margen
                 max_height = max(max_height, text_height)
             
             # Asegurar altura mínima
-            row_height = max(max_height, 10)  # Mínimo 10mm para diagnóstico + recomendación
+            row_height = max(max_height, 12)
             
             # Imprimir las celdas de esta fila
             self._print_cell_with_wrap(col_width, row_height, medico_text, 1, 0, 'L')
@@ -1017,7 +1061,7 @@ class PDF(FPDF):
         self.set_font('DejaVu', '', 8)
         self.set_text_color(100, 100, 100)
         note_text = "Esta tabla muestra los pares de diagnóstico-recomendación extraídos de cada fuente. " \
-                   "Los pares se extraen usando Gemini API con prompts especializados para mayor precisión."
+                   "Los diagnósticos similares se agrupan en la misma fila para facilitar la comparación."
         self.multi_cell(0, 4, note_text)
         self.ln(5)
 
@@ -1034,25 +1078,45 @@ class PDF(FPDF):
         # Configurar posición para el texto
         self.set_xy(x + 2, y + 2)  # Pequeño margen interno
         
-        # Si el texto tiene diagnóstico y recomendación (separados por \n)
-        if '\n' in txt and txt.strip():
+        # Procesar el texto línea por línea
+        if txt and txt.strip():
             lines = txt.split('\n')
-            if len(lines) >= 2:
-                # Primera línea: diagnóstico en negrita
-                self.set_font('DejaVu', 'B', 9)
-                self.multi_cell(w - 4, 4, lines[0].strip(), 0, align)
+            current_y = y + 2
+            
+            for i, line in enumerate(lines):
+                line = line.strip()
+                if not line:
+                    continue
                 
-                # Segunda línea: recomendación en normal
-                self.set_font('DejaVu', '', 8)
-                self.multi_cell(w - 4, 3.5, lines[1].strip(), 0, align)
-            else:
-                # Si solo hay una línea, mostrarla normal
-                self.set_font('DejaVu', '', 9)
-                self.multi_cell(w - 4, 4, txt, 0, align)
+                # Determinar el estilo de fuente según el contenido
+                if line.startswith('• '):
+                    # Es un diagnóstico (con viñeta)
+                    self.set_font('DejaVu', 'B', 8)
+                    line_height = 3.5
+                elif line.startswith('  → '):
+                    # Es una recomendación (con flecha)
+                    self.set_font('DejaVu', '', 7)
+                    line_height = 3
+                else:
+                    # Texto normal
+                    self.set_font('DejaVu', '', 8)
+                    line_height = 3.5
+                
+                # Verificar si hay espacio suficiente en la celda
+                if current_y + line_height > y + h - 2:
+                    # No hay espacio, cortar con "..."
+                    self.set_xy(x + 2, current_y)
+                    self.multi_cell(w - 4, line_height, "...", 0, align)
+                    break
+                
+                # Imprimir la línea
+                self.set_xy(x + 2, current_y)
+                self.multi_cell(w - 4, line_height, line, 0, align)
+                current_y += line_height + 0.5  # Pequeño espacio entre líneas
         else:
-            # Texto simple sin separación
-            self.set_font('DejaVu', '', 9)
-            self.multi_cell(w - 4, 4, txt, 0, align)
+            # Texto vacío
+            self.set_font('DejaVu', '', 8)
+            self.multi_cell(w - 4, 3.5, "Sin diagnóstico", 0, align)
         
         # Restaurar posición para la siguiente celda
         if ln == 1:  # Si es la última celda de la fila
