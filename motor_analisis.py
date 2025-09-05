@@ -1049,34 +1049,25 @@ class PDF(FPDF):
                     return text
                 return text[:max_length-3] + "..."
             
-            # Función para eliminar duplicados manteniendo el orden
-            def remove_duplicates(pairs):
-                seen = set()
+            # Función para eliminar duplicados en una lista de pares
+            def remove_duplicates_in_pairs(pairs):
+                seen_diagnoses = set()
                 unique_pairs = []
                 for diag, rec in pairs:
-                    # Normalizar el diagnóstico para comparar (más agresivo)
+                    # Normalizar diagnóstico para comparar (más simple)
                     diag_normalized = diag.lower().strip()
                     # Remover caracteres especiales y espacios extra
                     diag_normalized = re.sub(r'[^\w\s]', '', diag_normalized)
                     diag_normalized = re.sub(r'\s+', ' ', diag_normalized).strip()
                     
-                    # Verificar si es similar a algún diagnóstico ya visto
-                    is_duplicate = False
-                    for seen_diag in seen:
-                        # Verificar similitud básica (contiene palabras clave)
-                        if (diag_normalized in seen_diag or seen_diag in diag_normalized or
-                            any(word in diag_normalized for word in seen_diag.split() if len(word) > 3)):
-                            is_duplicate = True
-                            break
-                    
-                    if not is_duplicate:
-                        seen.add(diag_normalized)
+                    if diag_normalized not in seen_diagnoses:
+                        seen_diagnoses.add(diag_normalized)
                         unique_pairs.append((diag, rec))
                 return unique_pairs
             
-            # Procesar médico (eliminar duplicados)
+            # Procesar médico
             if sources['medico']:
-                unique_medico = remove_duplicates(sources['medico'])
+                unique_medico = remove_duplicates_in_pairs(sources['medico'])
                 for diag, rec in unique_medico:
                     diag_short = truncate_text(diag, 40)
                     rec_short = truncate_text(rec, 50)
@@ -1084,9 +1075,9 @@ class PDF(FPDF):
             else:
                 medico_texts.append("Sin diagnóstico")
             
-            # Procesar DeepSeek (eliminar duplicados)
+            # Procesar DeepSeek
             if sources['deepseek']:
-                unique_deepseek = remove_duplicates(sources['deepseek'])
+                unique_deepseek = remove_duplicates_in_pairs(sources['deepseek'])
                 for diag, rec in unique_deepseek:
                     diag_short = truncate_text(diag, 40)
                     rec_short = truncate_text(rec, 50)
@@ -1094,9 +1085,9 @@ class PDF(FPDF):
             else:
                 deepseek_texts.append("Sin diagnóstico")
             
-            # Procesar Gemini (eliminar duplicados)
+            # Procesar Gemini
             if sources['gemini']:
-                unique_gemini = remove_duplicates(sources['gemini'])
+                unique_gemini = remove_duplicates_in_pairs(sources['gemini'])
                 for diag, rec in unique_gemini:
                     diag_short = truncate_text(diag, 40)
                     rec_short = truncate_text(rec, 50)
