@@ -111,6 +111,17 @@ def generar_reporte_endpoint():
     if not data or 'token' not in data:
         return jsonify({"error": "Petición inválida. Se requiere un 'token'."}), 400
     
+    # Configurar timeout para evitar que el worker se cuelgue
+    import signal
+    import time
+    
+    def timeout_handler(signum, frame):
+        raise TimeoutError("El procesamiento del reporte excedió el tiempo límite")
+    
+    # Configurar timeout de 5 minutos (300 segundos)
+    signal.signal(signal.SIGALRM, timeout_handler)
+    signal.alarm(300)
+    
     token = data.get('token')
     final_results = {}
     db_connection = None
@@ -142,19 +153,49 @@ def generar_reporte_endpoint():
 
         # 5. --- CALCULAR MÉTRICAS---
         metrics = {}
-        # Similitud semántica (existente)
-        metrics['deepseek_similarity'] = motor_analisis.calculate_semantic_similarity(medico_report, deepseek_analysis)
-        metrics['gemini_similarity'] = motor_analisis.calculate_semantic_similarity(medico_report, gemini_analysis)
+        # Similitud semántica (con manejo de errores)
+        try:
+            print("🔄 Calculando similitud semántica para DeepSeek...")
+            metrics['deepseek_similarity'] = motor_analisis.calculate_semantic_similarity(medico_report, deepseek_analysis)
+        except Exception as e:
+            print(f"⚠️ Error calculando similitud semántica para DeepSeek: {e}")
+            metrics['deepseek_similarity'] = 0.0
+            
+        try:
+            print("🔄 Calculando similitud semántica para Gemini...")
+            metrics['gemini_similarity'] = motor_analisis.calculate_semantic_similarity(medico_report, gemini_analysis)
+        except Exception as e:
+            print(f"⚠️ Error calculando similitud semántica para Gemini: {e}")
+            metrics['gemini_similarity'] = 0.0
         
-        # Nuevas métricas: Kappa Cohen
-        metrics['deepseek_kappa'] = motor_analisis.calculate_kappa_cohen(medico_report, deepseek_analysis)
-        metrics['gemini_kappa'] = motor_analisis.calculate_kappa_cohen(medico_report, gemini_analysis)
+        # Nuevas métricas: Kappa Cohen (con manejo de errores)
+        try:
+            metrics['deepseek_kappa'] = motor_analisis.calculate_kappa_cohen(medico_report, deepseek_analysis)
+        except Exception as e:
+            print(f"⚠️ Error calculando Kappa Cohen para DeepSeek: {e}")
+            metrics['deepseek_kappa'] = 0.0
+            
+        try:
+            metrics['gemini_kappa'] = motor_analisis.calculate_kappa_cohen(medico_report, gemini_analysis)
+        except Exception as e:
+            print(f"⚠️ Error calculando Kappa Cohen para Gemini: {e}")
+            metrics['gemini_kappa'] = 0.0
         
-        # Nuevas métricas: Similitud de Jaccard
-        metrics['deepseek_jaccard'] = motor_analisis.calculate_jaccard_similarity(medico_report, deepseek_analysis)
-        metrics['gemini_jaccard'] = motor_analisis.calculate_jaccard_similarity(medico_report, gemini_analysis)
+        # Nuevas métricas: Similitud de Jaccard (con manejo de errores)
+        try:
+            metrics['deepseek_jaccard'] = motor_analisis.calculate_jaccard_similarity(medico_report, deepseek_analysis)
+        except Exception as e:
+            print(f"⚠️ Error calculando Jaccard para DeepSeek: {e}")
+            metrics['deepseek_jaccard'] = 0.0
+            
+        try:
+            metrics['gemini_jaccard'] = motor_analisis.calculate_jaccard_similarity(medico_report, gemini_analysis)
+        except Exception as e:
+            print(f"⚠️ Error calculando Jaccard para Gemini: {e}")
+            metrics['gemini_jaccard'] = 0.0
 
         # 6. Generar el PDF directamente en memoria
+        print("🔄 Generando PDF en memoria...")
         pdf_bytes = motor_analisis.generate_pdf_in_memory(
             token,
             final_results.get('medico', 'No disponible'),
@@ -164,6 +205,15 @@ def generar_reporte_endpoint():
             comparison_analysis,
              metrics
         )
+        
+        # Limpiar variables grandes para liberar memoria
+        del final_results
+        del summary_analysis
+        del comparison_analysis
+        del metrics
+        import gc
+        gc.collect()
+        print("✅ PDF generado exitosamente")
 
         # 7. Crear y devolver la respuesta de Flask como un archivo para descargar
         return Response(
@@ -172,6 +222,9 @@ def generar_reporte_endpoint():
             headers={"Content-Disposition": f"attachment;filename=informe_comparativo_{token}.pdf"}
         )
 
+    except TimeoutError as e:
+        print(f"⏰ Timeout en el procesamiento del reporte: {e}")
+        return jsonify({"error": "El procesamiento del reporte excedió el tiempo límite. Por favor, intente nuevamente."}), 408
     except Exception as e:
         # Captura cualquier otro error para dar una respuesta clara
         import traceback
@@ -179,6 +232,8 @@ def generar_reporte_endpoint():
         return jsonify({"error": f"Ocurrió un error inesperado en el servidor: {str(e)}"}), 500
     
     finally:
+        # Cancelar el timeout
+        signal.alarm(0)
         # Asegurarse de cerrar la conexión a la base de datos
         if db_connection and db_connection.is_connected():
             db_connection.close()

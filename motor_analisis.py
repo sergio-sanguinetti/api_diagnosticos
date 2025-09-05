@@ -307,7 +307,7 @@ def compare_ai_analyses(deepseek_analysis, gemini_analysis, api_key):
 # MÉTRICAS 
 # ==============================================================================
 def calculate_semantic_similarity(text_medico, text_ia):
-    """Calcula la similitud de coseno usando la API de Inferencia de Hugging Face."""
+    """Calcula la similitud de coseno usando la API de Inferencia de Hugging Face con manejo robusto de errores."""
     if not HUGGINGFACE_API_KEY:
         print("⚠️ No se encontró la clave de API de Hugging Face en las variables de entorno.")
         return 0.0
@@ -318,6 +318,12 @@ def calculate_semantic_similarity(text_medico, text_ia):
             print("❌ No se encontró SECCION_REPORTE_COMPLETO en el texto del médico.")
             return 0.0
         medico_content = medico_content_match.group(1).strip()
+        
+        # Limitar el contenido para evitar requests muy grandes
+        if len(medico_content) > 2000:
+            medico_content = medico_content[:2000] + "..."
+        if len(text_ia) > 2000:
+            text_ia = text_ia[:2000] + "..."
         
         headers = {"Authorization": f"Bearer {HUGGINGFACE_API_KEY}"}
         
@@ -332,26 +338,42 @@ def calculate_semantic_similarity(text_medico, text_ia):
             "options": {"wait_for_model": True}
         }
         
-        response = requests.post(HF_EMBEDDING_MODEL_URL, headers=headers, json=payload, timeout=90)
-        response.raise_for_status() 
+        # Reducir timeout y agregar reintentos
+        max_retries = 2
+        timeout = 30  # Reducido de 90 a 30 segundos
         
-        similarity_scores = response.json()
-        
-        # La API devuelve una lista de puntajes, tomamos el primero
-        if not isinstance(similarity_scores, list) or len(similarity_scores) == 0:
-            print(f"❌ Respuesta de similitud inesperada de la API de Hugging Face: {similarity_scores}")
-            return 0.0
+        for attempt in range(max_retries):
+            try:
+                print(f"🔄 Intento {attempt + 1} de similitud semántica...")
+                response = requests.post(HF_EMBEDDING_MODEL_URL, headers=headers, json=payload, timeout=timeout)
+                response.raise_for_status() 
+                
+                similarity_scores = response.json()
+                
+                # La API devuelve una lista de puntajes, tomamos el primero
+                if not isinstance(similarity_scores, list) or len(similarity_scores) == 0:
+                    print(f"❌ Respuesta de similitud inesperada de la API de Hugging Face: {similarity_scores}")
+                    return 0.0
 
-        return float(similarity_scores[0])
+                result = float(similarity_scores[0])
+                print(f"✅ Similitud semántica calculada: {result:.4f}")
+                return result
+                
+            except requests.exceptions.Timeout:
+                print(f"⏰ Timeout en intento {attempt + 1} de similitud semántica")
+                if attempt == max_retries - 1:
+                    print("❌ Todos los intentos de similitud semántica fallaron por timeout")
+                    return 0.0
+                continue
+            except requests.exceptions.RequestException as e:
+                print(f"❌ Error de red en intento {attempt + 1}: {e}")
+                if attempt == max_retries - 1:
+                    print("❌ Todos los intentos de similitud semántica fallaron por error de red")
+                    return 0.0
+                continue
 
-    except requests.exceptions.RequestException as e:
-        print(f"❌ Error de red con la API de Hugging Face: {e}")
-        # Imprime la respuesta del servidor si está disponible, para más detalles
-        if e.response:
-            print(f"Server response: {e.response.text}")
-        return 0.0
     except Exception as e:
-        print(f"❌ Error calculando la similitud: {e}")
+        print(f"❌ Error inesperado calculando la similitud: {e}")
         return 0.0
 
 def calculate_kappa_cohen(text_medico, text_ia):
@@ -997,10 +1019,21 @@ class PDF(FPDF):
             self.set_xy(x + w, y)
 
 def generate_pdf_in_memory(token, medico, deepseek, gemini, summary, comparison,metrics):
-    """Genera un PDF profesional multi-página en memoria."""
+    """Genera un PDF profesional multi-página en memoria con optimización de memoria."""
 
     pdf = PDF('P', 'mm', 'A4')
     pdf.alias_nb_pages()
+    
+    # Limitar el tamaño de los textos para evitar problemas de memoria
+    max_text_length = 5000
+    if len(deepseek) > max_text_length:
+        deepseek = deepseek[:max_text_length] + "\n\n[Texto truncado por límite de memoria]"
+    if len(gemini) > max_text_length:
+        gemini = gemini[:max_text_length] + "\n\n[Texto truncado por límite de memoria]"
+    if len(summary) > max_text_length:
+        summary = summary[:max_text_length] + "\n\n[Texto truncado por límite de memoria]"
+    if len(comparison) > max_text_length:
+        comparison = comparison[:max_text_length] + "\n\n[Texto truncado por límite de memoria]"
 
     # --- PÁGINA 1: DATOS Y DIAGNÓSTICOS DEL SISTEMA ---
     pdf.add_page()
