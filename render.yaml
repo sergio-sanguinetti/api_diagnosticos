@@ -7,7 +7,7 @@ services:
     runtime: python
     plan: free
     buildCommand: pip install -r requirements.txt
-    startCommand: gunicorn analizador_ia:app
+    startCommand: gunicorn --workers 2 --bind 0.0.0.0:$PORT --timeout 60 --keep-alive 2 --max-requests 100 --max-requests-jitter 10 analizador_ia:app
     envVars:
       - key: PYTHON_VERSION
         value: 3.9.16
@@ -25,6 +25,8 @@ services:
         sync: false
       - key: DB_NAME
         sync: false
+      - key: ENABLE_SEMANTIC_SIMILARITY
+        value: "false"
     healthCheckPath: /
     autoDeploy: true
     branch: main

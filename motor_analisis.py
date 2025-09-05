@@ -307,9 +307,21 @@ def compare_ai_analyses(deepseek_analysis, gemini_analysis, api_key):
 # MÉTRICAS 
 # ==============================================================================
 def calculate_semantic_similarity(text_medico, text_ia):
-    """Calcula la similitud de coseno usando la API de Inferencia de Hugging Face con manejo robusto de errores."""
+    """Calcula la similitud de coseno usando la API de Inferencia de Hugging Face con circuit breaker."""
+    # Circuit breaker: si no hay API key, retornar 0 inmediatamente
     if not HUGGINGFACE_API_KEY:
         print("⚠️ No se encontró la clave de API de Hugging Face en las variables de entorno.")
+        return 0.0
+
+    # Circuit breaker: verificar si el servicio está disponible (timeout muy corto)
+    try:
+        # Verificar conectividad con un timeout muy corto
+        test_response = requests.get("https://api-inference.huggingface.co/status", timeout=5)
+        if test_response.status_code != 200:
+            print("⚠️ API de Hugging Face no disponible, saltando similitud semántica")
+            return 0.0
+    except:
+        print("⚠️ No se puede conectar a Hugging Face, saltando similitud semántica")
         return 0.0
 
     try:
@@ -319,11 +331,11 @@ def calculate_semantic_similarity(text_medico, text_ia):
             return 0.0
         medico_content = medico_content_match.group(1).strip()
         
-        # Limitar el contenido para evitar requests muy grandes
-        if len(medico_content) > 2000:
-            medico_content = medico_content[:2000] + "..."
-        if len(text_ia) > 2000:
-            text_ia = text_ia[:2000] + "..."
+        # Limitar el contenido más agresivamente para evitar requests muy grandes
+        if len(medico_content) > 1000:  # Reducido de 2000 a 1000
+            medico_content = medico_content[:1000] + "..."
+        if len(text_ia) > 1000:  # Reducido de 2000 a 1000
+            text_ia = text_ia[:1000] + "..."
         
         headers = {"Authorization": f"Bearer {HUGGINGFACE_API_KEY}"}
         
@@ -338,39 +350,32 @@ def calculate_semantic_similarity(text_medico, text_ia):
             "options": {"wait_for_model": True}
         }
         
-        # Reducir timeout y agregar reintentos
-        max_retries = 2
-        timeout = 30  # Reducido de 90 a 30 segundos
+        # Timeout muy agresivo para evitar colgar el worker
+        timeout = 10  # Reducido de 30 a 10 segundos
+        max_retries = 1  # Solo un intento para evitar demoras
         
-        for attempt in range(max_retries):
-            try:
-                print(f"🔄 Intento {attempt + 1} de similitud semántica...")
-                response = requests.post(HF_EMBEDDING_MODEL_URL, headers=headers, json=payload, timeout=timeout)
-                response.raise_for_status() 
-                
-                similarity_scores = response.json()
-                
-                # La API devuelve una lista de puntajes, tomamos el primero
-                if not isinstance(similarity_scores, list) or len(similarity_scores) == 0:
-                    print(f"❌ Respuesta de similitud inesperada de la API de Hugging Face: {similarity_scores}")
-                    return 0.0
+        try:
+            print(f"🔄 Calculando similitud semántica (timeout: {timeout}s)...")
+            response = requests.post(HF_EMBEDDING_MODEL_URL, headers=headers, json=payload, timeout=timeout)
+            response.raise_for_status() 
+            
+            similarity_scores = response.json()
+            
+            # La API devuelve una lista de puntajes, tomamos el primero
+            if not isinstance(similarity_scores, list) or len(similarity_scores) == 0:
+                print(f"❌ Respuesta de similitud inesperada de la API de Hugging Face: {similarity_scores}")
+                return 0.0
 
-                result = float(similarity_scores[0])
-                print(f"✅ Similitud semántica calculada: {result:.4f}")
-                return result
-                
-            except requests.exceptions.Timeout:
-                print(f"⏰ Timeout en intento {attempt + 1} de similitud semántica")
-                if attempt == max_retries - 1:
-                    print("❌ Todos los intentos de similitud semántica fallaron por timeout")
-                    return 0.0
-                continue
-            except requests.exceptions.RequestException as e:
-                print(f"❌ Error de red en intento {attempt + 1}: {e}")
-                if attempt == max_retries - 1:
-                    print("❌ Todos los intentos de similitud semántica fallaron por error de red")
-                    return 0.0
-                continue
+            result = float(similarity_scores[0])
+            print(f"✅ Similitud semántica calculada: {result:.4f}")
+            return result
+            
+        except requests.exceptions.Timeout:
+            print(f"⏰ Timeout en similitud semántica ({timeout}s), usando valor por defecto")
+            return 0.0
+        except requests.exceptions.RequestException as e:
+            print(f"❌ Error de red en similitud semántica: {e}")
+            return 0.0
 
     except Exception as e:
         print(f"❌ Error inesperado calculando la similitud: {e}")

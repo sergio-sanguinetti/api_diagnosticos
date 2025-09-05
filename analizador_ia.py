@@ -83,6 +83,16 @@ def analyze_results_with_llm(report, api_key):
         return f"Error al generar contenido con la IA: {e}"
 
 
+@app.route('/', methods=['GET'])
+def health_check():
+    """Health check endpoint para monitoreo del servicio."""
+    return jsonify({
+        "status": "healthy",
+        "service": "API de Diagnósticos Médicos",
+        "version": "1.0.0",
+        "timestamp": __import__('datetime').datetime.now().isoformat()
+    })
+
 @app.route('/analizar', methods=['POST'])
 def analizar_endpoint():
     """ENDPOINT ORIGINAL: Analiza datos de un formulario."""
@@ -153,19 +163,28 @@ def generar_reporte_endpoint():
 
         # 5. --- CALCULAR MÉTRICAS---
         metrics = {}
-        # Similitud semántica (con manejo de errores)
-        try:
-            print("🔄 Calculando similitud semántica para DeepSeek...")
-            metrics['deepseek_similarity'] = motor_analisis.calculate_semantic_similarity(medico_report, deepseek_analysis)
-        except Exception as e:
-            print(f"⚠️ Error calculando similitud semántica para DeepSeek: {e}")
+        
+        # Verificar si se debe calcular similitud semántica (opcional para evitar timeouts)
+        enable_semantic_similarity = os.environ.get('ENABLE_SEMANTIC_SIMILARITY', 'true').lower() == 'true'
+        
+        if enable_semantic_similarity:
+            # Similitud semántica (con manejo de errores)
+            try:
+                print("🔄 Calculando similitud semántica para DeepSeek...")
+                metrics['deepseek_similarity'] = motor_analisis.calculate_semantic_similarity(medico_report, deepseek_analysis)
+            except Exception as e:
+                print(f"⚠️ Error calculando similitud semántica para DeepSeek: {e}")
+                metrics['deepseek_similarity'] = 0.0
+                
+            try:
+                print("🔄 Calculando similitud semántica para Gemini...")
+                metrics['gemini_similarity'] = motor_analisis.calculate_semantic_similarity(medico_report, gemini_analysis)
+            except Exception as e:
+                print(f"⚠️ Error calculando similitud semántica para Gemini: {e}")
+                metrics['gemini_similarity'] = 0.0
+        else:
+            print("⚠️ Similitud semántica deshabilitada por configuración")
             metrics['deepseek_similarity'] = 0.0
-            
-        try:
-            print("🔄 Calculando similitud semántica para Gemini...")
-            metrics['gemini_similarity'] = motor_analisis.calculate_semantic_similarity(medico_report, gemini_analysis)
-        except Exception as e:
-            print(f"⚠️ Error calculando similitud semántica para Gemini: {e}")
             metrics['gemini_similarity'] = 0.0
         
         # Nuevas métricas: Kappa Cohen (con manejo de errores)
