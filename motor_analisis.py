@@ -1043,24 +1043,36 @@ class PDF(FPDF):
             deepseek_texts = []
             gemini_texts = []
             
+            # Función para truncar texto
+            def truncate_text(text, max_length):
+                if len(text) <= max_length:
+                    return text
+                return text[:max_length-3] + "..."
+            
             # Procesar médico
             if sources['medico']:
                 for diag, rec in sources['medico']:
-                    medico_texts.append(f"• {diag}\n  → {rec}")
+                    diag_short = truncate_text(diag, 40)
+                    rec_short = truncate_text(rec, 50)
+                    medico_texts.append(f"• {diag_short}\n  → {rec_short}")
             else:
                 medico_texts.append("Sin diagnóstico")
             
             # Procesar DeepSeek
             if sources['deepseek']:
                 for diag, rec in sources['deepseek']:
-                    deepseek_texts.append(f"• {diag}\n  → {rec}")
+                    diag_short = truncate_text(diag, 40)
+                    rec_short = truncate_text(rec, 50)
+                    deepseek_texts.append(f"• {diag_short}\n  → {rec_short}")
             else:
                 deepseek_texts.append("Sin diagnóstico")
             
             # Procesar Gemini
             if sources['gemini']:
                 for diag, rec in sources['gemini']:
-                    gemini_texts.append(f"• {diag}\n  → {rec}")
+                    diag_short = truncate_text(diag, 40)
+                    rec_short = truncate_text(rec, 50)
+                    gemini_texts.append(f"• {diag_short}\n  → {rec_short}")
             else:
                 gemini_texts.append("Sin diagnóstico")
             
@@ -1069,14 +1081,29 @@ class PDF(FPDF):
             deepseek_text = "\n\n".join(deepseek_texts)
             gemini_text = "\n\n".join(gemini_texts)
             
-            # Calcular altura necesaria
+            # Calcular altura necesaria basada en el contenido real
             for text in [medico_text, deepseek_text, gemini_text]:
-                lines = text.count('\n') + 1
-                text_height = lines * base_row_height + 4  # +4 para margen
-                max_height = max(max_height, text_height)
+                if text and text.strip():
+                    lines = text.split('\n')
+                    content_height = 0
+                    for line in lines:
+                        line = line.strip()
+                        if line:
+                            if line.startswith('• '):
+                                content_height += 3.5  # Diagnóstico
+                            elif line.startswith('  → '):
+                                content_height += 3   # Recomendación
+                            else:
+                                content_height += 3.5  # Texto normal
+                        else:
+                            content_height += 2  # Línea vacía
+                    content_height += 4  # Margen
+                    max_height = max(max_height, content_height)
+                else:
+                    max_height = max(max_height, 8)  # Altura mínima para "Sin diagnóstico"
             
-            # Asegurar altura mínima
-            row_height = max(max_height, 12)
+            # Asegurar altura mínima y máxima
+            row_height = max(min(max_height, 25), 10)  # Entre 10 y 25mm
             
             # Imprimir las celdas de esta fila
             self._print_cell_with_wrap(col_width, row_height, medico_text, 1, 0, 'L')
@@ -1111,41 +1138,52 @@ class PDF(FPDF):
         if txt and txt.strip():
             lines = txt.split('\n')
             current_y = y + 2
+            max_width = w - 4  # Ancho disponible para el texto
             
             for i, line in enumerate(lines):
                 line = line.strip()
                 if not line:
+                    current_y += 2  # Espacio para línea vacía
                     continue
                 
                 # Determinar el estilo de fuente según el contenido
                 if line.startswith('• '):
                     # Es un diagnóstico (con viñeta)
-                    self.set_font('DejaVu', 'B', 8)
-                    line_height = 3.5
+                    self.set_font('DejaVu', 'B', 7)
+                    line_height = 3
+                    # Limitar longitud del diagnóstico
+                    if len(line) > 50:
+                        line = line[:47] + "..."
                 elif line.startswith('  → '):
                     # Es una recomendación (con flecha)
-                    self.set_font('DejaVu', '', 7)
-                    line_height = 3
+                    self.set_font('DejaVu', '', 6)
+                    line_height = 2.5
+                    # Limitar longitud de la recomendación
+                    if len(line) > 60:
+                        line = line[:57] + "..."
                 else:
                     # Texto normal
-                    self.set_font('DejaVu', '', 8)
-                    line_height = 3.5
+                    self.set_font('DejaVu', '', 7)
+                    line_height = 3
+                    # Limitar longitud del texto normal
+                    if len(line) > 50:
+                        line = line[:47] + "..."
                 
                 # Verificar si hay espacio suficiente en la celda
                 if current_y + line_height > y + h - 2:
                     # No hay espacio, cortar con "..."
                     self.set_xy(x + 2, current_y)
-                    self.multi_cell(w - 4, line_height, "...", 0, align)
+                    self.multi_cell(max_width, line_height, "...", 0, align)
                     break
                 
-                # Imprimir la línea
+                # Imprimir la línea con ajuste automático de texto
                 self.set_xy(x + 2, current_y)
-                self.multi_cell(w - 4, line_height, line, 0, align)
+                self.multi_cell(max_width, line_height, line, 0, align)
                 current_y += line_height + 0.5  # Pequeño espacio entre líneas
         else:
             # Texto vacío
-            self.set_font('DejaVu', '', 8)
-            self.multi_cell(w - 4, 3.5, "Sin diagnóstico", 0, align)
+            self.set_font('DejaVu', '', 7)
+            self.multi_cell(w - 4, 3, "Sin diagnóstico", 0, align)
         
         # Restaurar posición para la siguiente celda
         if ln == 1:  # Si es la última celda de la fila
