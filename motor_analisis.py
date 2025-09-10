@@ -1312,44 +1312,68 @@ def generate_pdf_in_memory(token, medico, deepseek, gemini, summary, comparison,
     )
     pdf.section_body(explanation)
     pdf.ln(10)
-   
-    # Mostrar los resultados de similitud semántica
+
+    # --- SECCIÓN DEEPSEEK ---
+    pdf.section_title('Métricas de DeepSeek (deepseek-chat)')
+    
+    # Obtener métricas de DeepSeek
     sim_deepseek = metrics.get('deepseek_similarity', 0.0)
-    sim_gemini = metrics.get('gemini_similarity', 0.0)
-
-    pdf.section_title('Similitud Semántica (Coseno)')
-    metric_text_ds = f"DeepSeek: {sim_deepseek:.4f} ({sim_deepseek*100:.2f}%)"
-    metric_text_gm = f"Gemini:   {sim_gemini:.4f} ({sim_gemini*100:.2f}%)"
-    
-    pdf.section_body(metric_text_ds, is_metric=True)
-    pdf.ln(2)
-    pdf.section_body(metric_text_gm, is_metric=True)
-    pdf.ln(5)
-
-    # Mostrar los resultados de Kappa Cohen
     kappa_deepseek = metrics.get('deepseek_kappa', 0.0)
-    kappa_gemini = metrics.get('gemini_kappa', 0.0)
-
-    pdf.section_title('Índice de Kappa Cohen')
-    kappa_text_ds = f"DeepSeek: {kappa_deepseek:.4f} ({kappa_deepseek*100:.2f}%)"
-    kappa_text_gm = f"Gemini:   {kappa_gemini:.4f} ({kappa_gemini*100:.2f}%)"
-    
-    pdf.section_body(kappa_text_ds, is_metric=True)
-    pdf.ln(2)
-    pdf.section_body(kappa_text_gm, is_metric=True)
-    pdf.ln(5)
-
-    # Mostrar los resultados de Jaccard
     jaccard_deepseek = metrics.get('deepseek_jaccard', 0.0)
-    jaccard_gemini = metrics.get('gemini_jaccard', 0.0)
-
-    pdf.section_title('Similitud de Jaccard')
-    jaccard_text_ds = f"DeepSeek: {jaccard_deepseek:.4f} ({jaccard_deepseek*100:.2f}%)"
-    jaccard_text_gm = f"Gemini:   {jaccard_gemini:.4f} ({jaccard_gemini*100:.2f}%)"
     
-    pdf.section_body(jaccard_text_ds, is_metric=True)
-    pdf.ln(2)
-    pdf.section_body(jaccard_text_gm, is_metric=True)
+    # Crear tabla de métricas para DeepSeek
+    deepseek_metrics_text = (
+        f"**Similitud Semántica**: {sim_deepseek:.4f} ({sim_deepseek*100:.2f}%)\n"
+        f"**Índice de Kappa Cohen**: {kappa_deepseek:.4f} ({kappa_deepseek*100:.2f}%)\n"
+        f"**Similitud de Jaccard**: {jaccard_deepseek:.4f} ({jaccard_deepseek*100:.2f}%)\n\n"
+        f"**Interpretación**:\n"
+        f"• Similitud Semántica: {'Excelente' if sim_deepseek >= 0.8 else 'Buena' if sim_deepseek >= 0.6 else 'Moderada' if sim_deepseek >= 0.4 else 'Baja'}\n"
+        f"• Concordancia Kappa: {'Excelente' if kappa_deepseek >= 0.8 else 'Buena' if kappa_deepseek >= 0.6 else 'Moderada' if kappa_deepseek >= 0.4 else 'Baja'}\n"
+        f"• Similitud Jaccard: {'Excelente' if jaccard_deepseek >= 0.8 else 'Buena' if jaccard_deepseek >= 0.6 else 'Moderada' if jaccard_deepseek >= 0.4 else 'Baja'}"
+    )
+    pdf.section_body(deepseek_metrics_text, is_metric=True)
+    pdf.ln(10)
+
+    # --- SECCIÓN GEMINI ---
+    pdf.section_title('Métricas de Gemini (gemini-1.5-flash)')
+    
+    # Obtener métricas de Gemini
+    sim_gemini = metrics.get('gemini_similarity', 0.0)
+    kappa_gemini = metrics.get('gemini_kappa', 0.0)
+    jaccard_gemini = metrics.get('gemini_jaccard', 0.0)
+    
+    # Crear tabla de métricas para Gemini
+    gemini_metrics_text = (
+        f"**Similitud Semántica**: {sim_gemini:.4f} ({sim_gemini*100:.2f}%)\n"
+        f"**Índice de Kappa Cohen**: {kappa_gemini:.4f} ({kappa_gemini*100:.2f}%)\n"
+        f"**Similitud de Jaccard**: {jaccard_gemini:.4f} ({jaccard_gemini*100:.2f}%)\n\n"
+        f"**Interpretación**:\n"
+        f"• Similitud Semántica: {'Excelente' if sim_gemini >= 0.8 else 'Buena' if sim_gemini >= 0.6 else 'Moderada' if sim_gemini >= 0.4 else 'Baja'}\n"
+        f"• Concordancia Kappa: {'Excelente' if kappa_gemini >= 0.8 else 'Buena' if kappa_gemini >= 0.6 else 'Moderada' if kappa_gemini >= 0.4 else 'Baja'}\n"
+        f"• Similitud Jaccard: {'Excelente' if jaccard_gemini >= 0.8 else 'Buena' if jaccard_gemini >= 0.6 else 'Moderada' if jaccard_gemini >= 0.4 else 'Baja'}"
+    )
+    pdf.section_body(gemini_metrics_text, is_metric=True)
+    pdf.ln(10)
+
+    # --- TABLA COMPARATIVA DE MÉTRICAS ---
+    pdf.section_title('Tabla Comparativa de Métricas por Versión de IA')
+    
+    # Crear tabla comparativa
+    comparison_table_text = (
+        "| Métrica | DeepSeek (deepseek-chat) | Gemini (gemini-1.5-flash) |\n"
+        "|---------|--------------------------|----------------------------|\n"
+        f"| **Similitud Semántica** | {sim_deepseek:.4f} ({sim_deepseek*100:.2f}%) | {sim_gemini:.4f} ({sim_gemini*100:.2f}%) |\n"
+        f"| **Índice de Kappa Cohen** | {kappa_deepseek:.4f} ({kappa_deepseek*100:.2f}%) | {kappa_gemini:.4f} ({kappa_gemini*100:.2f}%) |\n"
+        f"| **Similitud de Jaccard** | {jaccard_deepseek:.4f} ({jaccard_deepseek*100:.2f}%) | {jaccard_gemini:.4f} ({jaccard_gemini*100:.2f}%) |\n\n"
+        "**Resumen de Rendimiento**:\n"
+        f"• **Mejor Similitud Semántica**: {'DeepSeek' if sim_deepseek > sim_gemini else 'Gemini' if sim_gemini > sim_deepseek else 'Empate'}\n"
+        f"• **Mejor Concordancia Kappa**: {'DeepSeek' if kappa_deepseek > kappa_gemini else 'Gemini' if kappa_gemini > kappa_deepseek else 'Empate'}\n"
+        f"• **Mejor Similitud Jaccard**: {'DeepSeek' if jaccard_deepseek > jaccard_gemini else 'Gemini' if jaccard_gemini > jaccard_deepseek else 'Empate'}\n\n"
+        f"**Puntuación Promedio**:\n"
+        f"• DeepSeek: {((sim_deepseek + kappa_deepseek + jaccard_deepseek) / 3):.4f}\n"
+        f"• Gemini: {((sim_gemini + kappa_gemini + jaccard_gemini) / 3):.4f}"
+    )
+    pdf.section_body(comparison_table_text, is_metric=True)
 
     return pdf.output()
 
