@@ -947,8 +947,8 @@ class PDF(FPDF):
         
         # Dibujar encabezados
         self.cell(col_width, base_row_height * 2, 'MÉDICO/SISTEMA', 1, 0, 'C', fill=True)
-        self.cell(col_width, base_row_height * 2, 'DEEPSEEK', 1, 0, 'C', fill=True)
-        self.cell(col_width, base_row_height * 2, 'GEMINI', 1, 0, 'C', fill=True)
+        self.cell(col_width, base_row_height * 2, 'DEEPSEEK deepseek-chat', 1, 0, 'C', fill=True)
+        self.cell(col_width, base_row_height * 2, 'GEMINI gemini-1.5-flash', 1, 0, 'C', fill=True)
         self.ln(base_row_height * 2)
         
         # Configurar fuente para contenido
