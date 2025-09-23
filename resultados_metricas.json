@@ -100,8 +100,8 @@
     }
   },
   "kappa_cohen": {
-    "medico_vs_deepseek": 0.0,
-    "medico_vs_gemini": 0.0,
-    "deepseek_vs_gemini": 0.6923076923076923
+    "medico_vs_deepseek": 0.17241379310344823,
+    "medico_vs_gemini": 0.17241379310344823,
+    "deepseek_vs_gemini": 0.7931034482758621
   }
 }

@@ -37,6 +37,38 @@ class GeneradorMetricas:
             max_features=1000
         )
     
+    def _normalizar_diagnostico(self, diagnostico: str) -> str:
+        """
+        Normaliza un diagnóstico para mejor comparación.
+        
+        Args:
+            diagnostico: Diagnóstico a normalizar
+            
+        Returns:
+            Diagnóstico normalizado
+        """
+        if not diagnostico or diagnostico.strip() == '':
+            return 'sin diagnóstico'
+        
+        # Convertir a minúsculas y quitar espacios extra
+        normalizado = diagnostico.strip().lower()
+        
+        # Mapear variaciones comunes
+        mapeo_variaciones = {
+            'obesidad morbida': 'obesidad mórbida',
+            'obesidad mórbida': 'obesidad mórbida',
+            'linfopenia': 'linfopenia',
+            'linopenia': 'linfopenia',
+            'hipotiroidismo no especificado': 'hipotiroidismo no especificado',
+            'hipotiroidismo, no especificado': 'hipotiroidismo no especificado',
+            'ametropia corregida': 'ametropia corregida',
+            'ametropía corregida': 'ametropia corregida',
+            'sin diagnóstico': 'sin diagnóstico',
+            'sin diagnostico': 'sin diagnóstico'
+        }
+        
+        return mapeo_variaciones.get(normalizado, normalizado)
+    
     def _cargar_terminos_medicos(self) -> Set[str]:
         """Carga el conjunto de términos médicos reconocidos."""
         return {
@@ -268,7 +300,7 @@ class GeneradorMetricas:
             print(f"❌ Error calculando similitud de cosenos: {e}")
             return 0.0
     
-    def calcular_kappa_cohen(self, datos_medico: List[Dict], datos_ia: List[Dict]) -> float:
+    def calcular_kappa_cohen(self, datos_medico: List[Dict], datos_ia: List[Dict], debug: bool = False) -> float:
         """
         Calcula el índice de Kappa Cohen para evaluar concordancia entre evaluadores.
         
@@ -280,17 +312,20 @@ class GeneradorMetricas:
             Valor del índice Kappa Cohen (-1.0 a 1.0)
         """
         try:
-            # Crear matriz de confusión
+            # Crear conjunto de todas las categorías posibles (incluyendo "Sin diagnóstico")
             categorias = set()
             
-            # Recopilar todas las categorías únicas
+            # Recopilar todas las categorías únicas (normalizadas)
             for caso in datos_medico + datos_ia:
                 diagnostico = caso.get('diagnostico', '').strip()
-                if diagnostico and diagnostico.lower() != 'sin diagnóstico':
-                    categorias.add(diagnostico.lower())
+                diagnostico_normalizado = self._normalizar_diagnostico(diagnostico)
+                categorias.add(diagnostico_normalizado)
             
             # Convertir a lista ordenada
             categorias = sorted(list(categorias))
+            
+            if debug:
+                print(f"🔍 Categorías encontradas: {categorias}")
             
             if len(categorias) == 0:
                 return 1.0  # Sin categorías = perfecta concordancia
@@ -302,45 +337,61 @@ class GeneradorMetricas:
             # Mapear diagnósticos a índices
             categoria_to_idx = {cat: idx for idx, cat in enumerate(categorias)}
             
+            if debug:
+                print(f"🔍 Mapeo de categorías: {categoria_to_idx}")
+            
             # Llenar matriz de confusión
-            for i in range(len(datos_medico)):
-                medico_diag = datos_medico[i].get('diagnostico', '').strip().lower()
-                ia_diag = datos_ia[i].get('diagnostico', '').strip().lower()
+            n_total = len(datos_medico)
+            
+            for i in range(n_total):
+                medico_diag = datos_medico[i].get('diagnostico', '').strip()
+                ia_diag = datos_ia[i].get('diagnostico', '').strip()
                 
-                # Manejar casos sin diagnóstico
-                if medico_diag == 'sin diagnóstico' or medico_diag == '':
-                    medico_idx = -1
-                else:
-                    medico_idx = categoria_to_idx.get(medico_diag, -1)
+                # Normalizar diagnósticos usando la función de normalización
+                medico_diag = self._normalizar_diagnostico(medico_diag)
+                ia_diag = self._normalizar_diagnostico(ia_diag)
                 
-                if ia_diag == 'sin diagnóstico' or ia_diag == '':
-                    ia_idx = -1
-                else:
-                    ia_idx = categoria_to_idx.get(ia_diag, -1)
+                # Obtener índices
+                medico_idx = categoria_to_idx.get(medico_diag, -1)
+                ia_idx = categoria_to_idx.get(ia_diag, -1)
                 
-                # Solo contar si ambos tienen diagnóstico válido
+                if debug:
+                    print(f"   Caso {i+1}: Médico='{medico_diag}' (idx={medico_idx}), IA='{ia_diag}' (idx={ia_idx})")
+                
+                # Contar en la matriz de confusión
                 if medico_idx >= 0 and ia_idx >= 0:
                     matriz_confusion[medico_idx, ia_idx] += 1
             
-            # Calcular métricas de Kappa
-            n_total = np.sum(matriz_confusion)
+            if debug:
+                print(f"🔍 Matriz de confusión:\n{matriz_confusion}")
+                print(f"🔍 Categorías: {categorias}")
             
+            # Calcular métricas de Kappa
             if n_total == 0:
                 return 1.0  # Sin datos = perfecta concordancia
             
-            # Concordancia observada (Po)
+            # Concordancia observada (Po) - diagonal de la matriz
             concordancia_observada = np.trace(matriz_confusion) / n_total
             
-            # Concordancia esperada (Pe)
+            # Concordancia esperada (Pe) - suma de productos marginales
             suma_filas = np.sum(matriz_confusion, axis=1)
             suma_columnas = np.sum(matriz_confusion, axis=0)
             concordancia_esperada = np.sum(suma_filas * suma_columnas) / (n_total ** 2)
             
+            if debug:
+                print(f"🔍 Concordancia observada (Po): {concordancia_observada:.4f}")
+                print(f"🔍 Concordancia esperada (Pe): {concordancia_esperada:.4f}")
+                print(f"🔍 Suma filas: {suma_filas}")
+                print(f"🔍 Suma columnas: {suma_columnas}")
+            
             # Calcular Kappa
-            if concordancia_esperada == 1.0:
-                kappa = 1.0
+            if concordancia_esperada >= 1.0:
+                kappa = 1.0 if concordancia_observada >= 1.0 else 0.0
             else:
                 kappa = (concordancia_observada - concordancia_esperada) / (1.0 - concordancia_esperada)
+            
+            if debug:
+                print(f"🔍 Kappa calculado: {kappa:.4f}")
             
             return kappa
             
