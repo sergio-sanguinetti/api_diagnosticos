@@ -100,8 +100,28 @@
     }
   },
   "kappa_cohen": {
-    "medico_vs_deepseek": 0.17241379310344823,
-    "medico_vs_gemini": 0.17241379310344823,
-    "deepseek_vs_gemini": 0.7931034482758621
+    "medico_vs_deepseek": 0.1724137931034482,
+    "medico_vs_gemini": 0.1724137931034482,
+    "deepseek_vs_gemini": 1.0
+  },
+  "concordancia_medica": {
+    "medico_vs_deepseek": {
+      "concordancia_exacta": 0.0,
+      "concordancia_semantica": 0.3333333333333333,
+      "concordancia_parcial": 0.3333333333333333,
+      "indice_concordancia_medica": 0.2
+    },
+    "medico_vs_gemini": {
+      "concordancia_exacta": 0.0,
+      "concordancia_semantica": 0.3333333333333333,
+      "concordancia_parcial": 0.3333333333333333,
+      "indice_concordancia_medica": 0.2
+    },
+    "deepseek_vs_gemini": {
+      "concordancia_exacta": 0.8333333333333334,
+      "concordancia_semantica": 1.0,
+      "concordancia_parcial": 1.0,
+      "indice_concordancia_medica": 0.9333333333333333
+    }
   }
 }

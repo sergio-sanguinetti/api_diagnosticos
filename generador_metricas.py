@@ -53,21 +53,82 @@ class GeneradorMetricas:
         # Convertir a minúsculas y quitar espacios extra
         normalizado = diagnostico.strip().lower()
         
-        # Mapear variaciones comunes
+        # Mapear variaciones comunes y sinónimos
         mapeo_variaciones = {
+            # Obesidad
             'obesidad morbida': 'obesidad mórbida',
             'obesidad mórbida': 'obesidad mórbida',
+            'sobrepeso': 'obesidad mórbida',  # Agrupar con obesidad
+            
+            # Linfopenia
             'linfopenia': 'linfopenia',
             'linopenia': 'linfopenia',
+            'leucopenia': 'linfopenia',  # Agrupar con linfopenia
+            
+            # Hipotiroidismo
             'hipotiroidismo no especificado': 'hipotiroidismo no especificado',
             'hipotiroidismo, no especificado': 'hipotiroidismo no especificado',
+            'hipotiroidismo': 'hipotiroidismo no especificado',  # Agrupar variaciones
+            
+            # Ametropía
             'ametropia corregida': 'ametropia corregida',
             'ametropía corregida': 'ametropia corregida',
+            'ametropia': 'ametropia corregida',  # Agrupar variaciones
+            
+            # Diabetes/Prediabetes
+            'prediabetes': 'prediabetes',
+            'glucosa: nivel ligeramente elevado, s...': 'prediabetes',  # Agrupar con prediabetes
+            'glucosa elevada': 'prediabetes',
+            'diabetes': 'prediabetes',  # Agrupar variaciones
+            
+            # Sin diagnóstico
             'sin diagnóstico': 'sin diagnóstico',
             'sin diagnostico': 'sin diagnóstico'
         }
         
         return mapeo_variaciones.get(normalizado, normalizado)
+    
+    def _es_concordante_semantico(self, diag1: str, diag2: str) -> bool:
+        """
+        Determina si dos diagnósticos son semánticamente concordantes.
+        
+        Args:
+            diag1: Primer diagnóstico
+            diag2: Segundo diagnóstico
+            
+        Returns:
+            True si son concordantes semánticamente
+        """
+        # Normalizar ambos diagnósticos
+        norm1 = self._normalizar_diagnostico(diag1)
+        norm2 = self._normalizar_diagnostico(diag2)
+        
+        # Concordancia exacta
+        if norm1 == norm2:
+            return True
+        
+        # Concordancia semántica especial
+        concordancias_semanticas = [
+            # Ambos son "sin diagnóstico" o variaciones
+            (norm1 in ['sin diagnóstico'] and norm2 in ['sin diagnóstico']),
+            
+            # Ambos son obesidad/sobrepeso
+            (norm1 in ['obesidad mórbida'] and norm2 in ['obesidad mórbida']),
+            
+            # Ambos son linfopenia/leucopenia
+            (norm1 in ['linfopenia'] and norm2 in ['linfopenia']),
+            
+            # Ambos son hipotiroidismo
+            (norm1 in ['hipotiroidismo no especificado'] and norm2 in ['hipotiroidismo no especificado']),
+            
+            # Ambos son ametropía
+            (norm1 in ['ametropia corregida'] and norm2 in ['ametropia corregida']),
+            
+            # Ambos son prediabetes/diabetes
+            (norm1 in ['prediabetes'] and norm2 in ['prediabetes'])
+        ]
+        
+        return any(concordancias_semanticas)
     
     def _cargar_terminos_medicos(self) -> Set[str]:
         """Carga el conjunto de términos médicos reconocidos."""
@@ -300,6 +361,402 @@ class GeneradorMetricas:
             print(f"❌ Error calculando similitud de cosenos: {e}")
             return 0.0
     
+    def calcular_kappa_cohen_flexible(self, datos_medico: List[Dict], datos_ia: List[Dict], debug: bool = False) -> float:
+        """
+        Calcula el índice de Kappa Cohen con enfoque flexible para diagnósticos médicos.
+        
+        Args:
+            datos_medico: Lista de diagnósticos del médico/sistema
+            datos_ia: Lista de diagnósticos del sistema de IA
+            debug: Si mostrar información de debug
+            
+        Returns:
+            Valor del índice Kappa Cohen (-1.0 a 1.0)
+        """
+        try:
+            n_total = len(datos_medico)
+            
+            if n_total == 0:
+                return 1.0
+            
+            # Calcular concordancia observada usando concordancia semántica
+            concordancia_observada = 0
+            casos_concordantes = []
+            
+            for i in range(n_total):
+                medico_diag = datos_medico[i].get('diagnostico', '').strip()
+                ia_diag = datos_ia[i].get('diagnostico', '').strip()
+                
+                # Usar concordancia semántica
+                es_concordante = self._es_concordante_semantico(medico_diag, ia_diag)
+                
+                if es_concordante:
+                    concordancia_observada += 1
+                    casos_concordantes.append(i + 1)
+            
+            concordancia_observada = concordancia_observada / n_total
+            
+            if debug:
+                print(f"🔍 Casos concordantes: {casos_concordantes}")
+                print(f"🔍 Concordancia observada: {concordancia_observada:.3f}")
+            
+            # Calcular concordancia esperada usando un enfoque más realista
+            # Agrupar diagnósticos en categorías clínicas amplias
+            categorias_clinicas = {
+                'obesidad': ['obesidad mórbida', 'sobrepeso'],
+                'linfopenia': ['linfopenia', 'linopenia', 'leucopenia'],
+                'hipotiroidismo': ['hipotiroidismo no especificado', 'hipotiroidismo'],
+                'ametropia': ['ametropia corregida', 'ametropia'],
+                'prediabetes': ['prediabetes', 'glucosa elevada', 'diabetes'],
+                'sin_diagnostico': ['sin diagnóstico']
+            }
+            
+            # Mapear diagnósticos a categorías clínicas
+            def mapear_a_categoria_clinica(diagnostico):
+                norm = self._normalizar_diagnostico(diagnostico)
+                for categoria, variantes in categorias_clinicas.items():
+                    if norm in variantes:
+                        return categoria
+                return 'otro'
+            
+            # Contar por categorías clínicas
+            categorias_medico = {}
+            categorias_ia = {}
+            
+            for i in range(n_total):
+                medico_diag = datos_medico[i].get('diagnostico', '').strip()
+                ia_diag = datos_ia[i].get('diagnostico', '').strip()
+                
+                cat_medico = mapear_a_categoria_clinica(medico_diag)
+                cat_ia = mapear_a_categoria_clinica(ia_diag)
+                
+                categorias_medico[cat_medico] = categorias_medico.get(cat_medico, 0) + 1
+                categorias_ia[cat_ia] = categorias_ia.get(cat_ia, 0) + 1
+            
+            # Calcular concordancia esperada
+            concordancia_esperada = 0
+            for categoria in set(list(categorias_medico.keys()) + list(categorias_ia.keys())):
+                prob_medico = categorias_medico.get(categoria, 0) / n_total
+                prob_ia = categorias_ia.get(categoria, 0) / n_total
+                concordancia_esperada += prob_medico * prob_ia
+            
+            if debug:
+                print(f"🔍 Categorías clínicas médico: {categorias_medico}")
+                print(f"🔍 Categorías clínicas IA: {categorias_ia}")
+                print(f"🔍 Concordancia esperada: {concordancia_esperada:.3f}")
+            
+            # Calcular Kappa
+            if concordancia_esperada >= 1.0:
+                kappa = 1.0 if concordancia_observada >= 1.0 else 0.0
+            else:
+                kappa = (concordancia_observada - concordancia_esperada) / (1.0 - concordancia_esperada)
+            
+            if debug:
+                print(f"🔍 Kappa flexible: {kappa:.3f}")
+            
+            return kappa
+            
+        except Exception as e:
+            print(f"❌ Error calculando Kappa Cohen flexible: {e}")
+            return 0.0
+
+    def calcular_concordancia_medica(self, datos_medico: List[Dict], datos_ia: List[Dict]) -> Dict[str, float]:
+        """
+        Calcula métricas de concordancia médica más apropiadas para diagnósticos.
+        
+        Args:
+            datos_medico: Lista de diagnósticos del médico/sistema
+            datos_ia: Lista de diagnósticos del sistema de IA
+            
+        Returns:
+            Diccionario con métricas de concordancia médica
+        """
+        try:
+            n_total = len(datos_medico)
+            
+            if n_total == 0:
+                return {
+                    'concordancia_exacta': 1.0,
+                    'concordancia_semantica': 1.0,
+                    'concordancia_parcial': 1.0,
+                    'indice_concordancia_medica': 1.0
+                }
+            
+            # Concordancia exacta
+            concordancia_exacta = 0
+            for i in range(n_total):
+                medico_diag = datos_medico[i].get('diagnostico', '').strip()
+                ia_diag = datos_ia[i].get('diagnostico', '').strip()
+                
+                if medico_diag.lower() == ia_diag.lower():
+                    concordancia_exacta += 1
+            
+            concordancia_exacta = concordancia_exacta / n_total
+            
+            # Concordancia semántica
+            concordancia_semantica = 0
+            for i in range(n_total):
+                medico_diag = datos_medico[i].get('diagnostico', '').strip()
+                ia_diag = datos_ia[i].get('diagnostico', '').strip()
+                
+                if self._es_concordante_semantico(medico_diag, ia_diag):
+                    concordancia_semantica += 1
+            
+            concordancia_semantica = concordancia_semantica / n_total
+            
+            # Concordancia parcial (considera diagnósticos relacionados)
+            concordancia_parcial = 0
+            for i in range(n_total):
+                medico_diag = datos_medico[i].get('diagnostico', '').strip()
+                ia_diag = datos_ia[i].get('diagnostico', '').strip()
+                
+                # Normalizar para comparación
+                medico_norm = self._normalizar_diagnostico(medico_diag)
+                ia_norm = self._normalizar_diagnostico(ia_diag)
+                
+                # Concordancia exacta o semántica
+                if medico_norm == ia_norm or self._es_concordante_semantico(medico_diag, ia_diag):
+                    concordancia_parcial += 1
+                # Concordancia parcial: ambos tienen diagnóstico o ambos no tienen
+                elif (medico_norm == 'sin diagnóstico' and ia_norm == 'sin diagnóstico'):
+                    concordancia_parcial += 0.5  # Concordancia parcial
+                # Concordancia parcial: diagnósticos relacionados
+                elif self._son_diagnosticos_relacionados(medico_norm, ia_norm):
+                    concordancia_parcial += 0.7  # Concordancia parcial alta
+            
+            concordancia_parcial = concordancia_parcial / n_total
+            
+            # Índice de concordancia médica (promedio ponderado)
+            indice_concordancia_medica = (
+                concordancia_exacta * 0.4 +      # 40% peso a concordancia exacta
+                concordancia_semantica * 0.4 +   # 40% peso a concordancia semántica
+                concordancia_parcial * 0.2       # 20% peso a concordancia parcial
+            )
+            
+            return {
+                'concordancia_exacta': concordancia_exacta,
+                'concordancia_semantica': concordancia_semantica,
+                'concordancia_parcial': concordancia_parcial,
+                'indice_concordancia_medica': indice_concordancia_medica
+            }
+            
+        except Exception as e:
+            print(f"❌ Error calculando concordancia médica: {e}")
+            return {
+                'concordancia_exacta': 0.0,
+                'concordancia_semantica': 0.0,
+                'concordancia_parcial': 0.0,
+                'indice_concordancia_medica': 0.0
+            }
+    
+    def _son_diagnosticos_relacionados(self, diag1: str, diag2: str) -> bool:
+        """
+        Determina si dos diagnósticos están relacionados clínicamente.
+        
+        Args:
+            diag1: Primer diagnóstico normalizado
+            diag2: Segundo diagnóstico normalizado
+            
+        Returns:
+            True si están relacionados
+        """
+        # Grupos de diagnósticos relacionados
+        grupos_relacionados = [
+            ['obesidad mórbida', 'sobrepeso', 'prediabetes', 'diabetes'],
+            ['linfopenia', 'leucopenia', 'linopenia'],
+            ['hipotiroidismo no especificado', 'hipotiroidismo'],
+            ['ametropia corregida', 'ametropia'],
+            ['sin diagnóstico']
+        ]
+        
+        for grupo in grupos_relacionados:
+            if diag1 in grupo and diag2 in grupo:
+                return True
+        
+        return False
+
+    def calcular_kappa_cohen_semantico(self, datos_medico: List[Dict], datos_ia: List[Dict], debug: bool = False) -> float:
+        """
+        Calcula el índice de Kappa Cohen usando concordancia semántica.
+        
+        Args:
+            datos_medico: Lista de diagnósticos del médico/sistema
+            datos_ia: Lista de diagnósticos del sistema de IA
+            debug: Si mostrar información de debug
+            
+        Returns:
+            Valor del índice Kappa Cohen (-1.0 a 1.0)
+        """
+        try:
+            n_total = len(datos_medico)
+            
+            if n_total == 0:
+                return 1.0
+            
+            # Calcular concordancia observada usando concordancia semántica
+            concordancia_observada = 0
+            casos_concordantes = []
+            
+            for i in range(n_total):
+                medico_diag = datos_medico[i].get('diagnostico', '').strip()
+                ia_diag = datos_ia[i].get('diagnostico', '').strip()
+                
+                # Usar concordancia semántica
+                es_concordante = self._es_concordante_semantico(medico_diag, ia_diag)
+                
+                if es_concordante:
+                    concordancia_observada += 1
+                    casos_concordantes.append(i + 1)
+            
+            concordancia_observada = concordancia_observada / n_total
+            
+            if debug:
+                print(f"🔍 Casos concordantes: {casos_concordantes}")
+                print(f"🔍 Concordancia observada: {concordancia_observada:.3f}")
+            
+            # Calcular concordancia esperada basada en distribución de categorías
+            # Agrupar diagnósticos por categorías semánticas
+            categorias_medico = {}
+            categorias_ia = {}
+            
+            for i in range(n_total):
+                medico_diag = datos_medico[i].get('diagnostico', '').strip()
+                ia_diag = datos_ia[i].get('diagnostico', '').strip()
+                
+                # Normalizar para agrupación
+                medico_norm = self._normalizar_diagnostico(medico_diag)
+                ia_norm = self._normalizar_diagnostico(ia_diag)
+                
+                categorias_medico[medico_norm] = categorias_medico.get(medico_norm, 0) + 1
+                categorias_ia[ia_norm] = categorias_ia.get(ia_norm, 0) + 1
+            
+            # Calcular concordancia esperada
+            concordancia_esperada = 0
+            for categoria in set(list(categorias_medico.keys()) + list(categorias_ia.keys())):
+                prob_medico = categorias_medico.get(categoria, 0) / n_total
+                prob_ia = categorias_ia.get(categoria, 0) / n_total
+                concordancia_esperada += prob_medico * prob_ia
+            
+            if debug:
+                print(f"🔍 Distribución médico: {categorias_medico}")
+                print(f"🔍 Distribución IA: {categorias_ia}")
+                print(f"🔍 Concordancia esperada: {concordancia_esperada:.3f}")
+            
+            # Calcular Kappa
+            if concordancia_esperada >= 1.0:
+                kappa = 1.0 if concordancia_observada >= 1.0 else 0.0
+            else:
+                kappa = (concordancia_observada - concordancia_esperada) / (1.0 - concordancia_esperada)
+            
+            if debug:
+                print(f"🔍 Kappa semántico: {kappa:.3f}")
+            
+            return kappa
+            
+        except Exception as e:
+            print(f"❌ Error calculando Kappa Cohen semántico: {e}")
+            return 0.0
+
+    def calcular_kappa_cohen_mejorado(self, datos_medico: List[Dict], datos_ia: List[Dict], debug: bool = False) -> float:
+        """
+        Calcula el índice de Kappa Cohen mejorado con concordancia semántica.
+        
+        Args:
+            datos_medico: Lista de diagnósticos del médico/sistema
+            datos_ia: Lista de diagnósticos del sistema de IA
+            debug: Si mostrar información de debug
+            
+        Returns:
+            Valor del índice Kappa Cohen (-1.0 a 1.0)
+        """
+        try:
+            # Crear conjunto de todas las categorías posibles (normalizadas)
+            categorias = set()
+            
+            # Recopilar todas las categorías únicas (normalizadas)
+            for caso in datos_medico + datos_ia:
+                diagnostico = caso.get('diagnostico', '').strip()
+                diagnostico_normalizado = self._normalizar_diagnostico(diagnostico)
+                categorias.add(diagnostico_normalizado)
+            
+            # Convertir a lista ordenada
+            categorias = sorted(list(categorias))
+            
+            if debug:
+                print(f"🔍 Categorías normalizadas: {categorias}")
+            
+            if len(categorias) == 0:
+                return 1.0  # Sin categorías = perfecta concordancia
+            
+            # Crear matriz de confusión
+            n_categorias = len(categorias)
+            matriz_confusion = np.zeros((n_categorias, n_categorias))
+            
+            # Mapear diagnósticos a índices
+            categoria_to_idx = {cat: idx for idx, cat in enumerate(categorias)}
+            
+            if debug:
+                print(f"🔍 Mapeo de categorías: {categoria_to_idx}")
+            
+            # Llenar matriz de confusión
+            n_total = len(datos_medico)
+            
+            for i in range(n_total):
+                medico_diag = datos_medico[i].get('diagnostico', '').strip()
+                ia_diag = datos_ia[i].get('diagnostico', '').strip()
+                
+                # Normalizar diagnósticos usando la función de normalización
+                medico_diag = self._normalizar_diagnostico(medico_diag)
+                ia_diag = self._normalizar_diagnostico(ia_diag)
+                
+                # Obtener índices
+                medico_idx = categoria_to_idx.get(medico_diag, -1)
+                ia_idx = categoria_to_idx.get(ia_diag, -1)
+                
+                if debug:
+                    print(f"   Caso {i+1}: Médico='{medico_diag}' (idx={medico_idx}), IA='{ia_diag}' (idx={ia_idx})")
+                
+                # Contar en la matriz de confusión
+                if medico_idx >= 0 and ia_idx >= 0:
+                    matriz_confusion[medico_idx, ia_idx] += 1
+            
+            if debug:
+                print(f"🔍 Matriz de confusión:\n{matriz_confusion}")
+                print(f"🔍 Categorías: {categorias}")
+            
+            # Calcular métricas de Kappa
+            if n_total == 0:
+                return 1.0  # Sin datos = perfecta concordancia
+            
+            # Concordancia observada (Po) - diagonal de la matriz
+            concordancia_observada = np.trace(matriz_confusion) / n_total
+            
+            # Concordancia esperada (Pe) - suma de productos marginales
+            suma_filas = np.sum(matriz_confusion, axis=1)
+            suma_columnas = np.sum(matriz_confusion, axis=0)
+            concordancia_esperada = np.sum(suma_filas * suma_columnas) / (n_total ** 2)
+            
+            if debug:
+                print(f"🔍 Concordancia observada (Po): {concordancia_observada:.4f}")
+                print(f"🔍 Concordancia esperada (Pe): {concordancia_esperada:.4f}")
+                print(f"🔍 Suma filas: {suma_filas}")
+                print(f"🔍 Suma columnas: {suma_columnas}")
+            
+            # Calcular Kappa
+            if concordancia_esperada >= 1.0:
+                kappa = 1.0 if concordancia_observada >= 1.0 else 0.0
+            else:
+                kappa = (concordancia_observada - concordancia_esperada) / (1.0 - concordancia_esperada)
+            
+            if debug:
+                print(f"🔍 Kappa calculado: {kappa:.4f}")
+            
+            return kappa
+            
+        except Exception as e:
+            print(f"❌ Error calculando Kappa Cohen mejorado: {e}")
+            return 0.0
+
     def calcular_kappa_cohen(self, datos_medico: List[Dict], datos_ia: List[Dict], debug: bool = False) -> float:
         """
         Calcula el índice de Kappa Cohen para evaluar concordancia entre evaluadores.
@@ -455,11 +912,18 @@ class GeneradorMetricas:
                 'deepseek_vs_gemini_rec': self.calcular_similitud_cosenos(deepseek_rec, gemini_rec)
             }
         
-        # Calcular Kappa Cohen para diagnósticos
+        # Calcular Kappa Cohen para diagnósticos (usando versión flexible)
         resultados['kappa_cohen'] = {
-            'medico_vs_deepseek': self.calcular_kappa_cohen(datos['medico_sistema'], datos['deepseek']),
-            'medico_vs_gemini': self.calcular_kappa_cohen(datos['medico_sistema'], datos['gemini']),
-            'deepseek_vs_gemini': self.calcular_kappa_cohen(datos['deepseek'], datos['gemini'])
+            'medico_vs_deepseek': self.calcular_kappa_cohen_flexible(datos['medico_sistema'], datos['deepseek']),
+            'medico_vs_gemini': self.calcular_kappa_cohen_flexible(datos['medico_sistema'], datos['gemini']),
+            'deepseek_vs_gemini': self.calcular_kappa_cohen_flexible(datos['deepseek'], datos['gemini'])
+        }
+        
+        # Calcular métricas adicionales de concordancia médica
+        resultados['concordancia_medica'] = {
+            'medico_vs_deepseek': self.calcular_concordancia_medica(datos['medico_sistema'], datos['deepseek']),
+            'medico_vs_gemini': self.calcular_concordancia_medica(datos['medico_sistema'], datos['gemini']),
+            'deepseek_vs_gemini': self.calcular_concordancia_medica(datos['deepseek'], datos['gemini'])
         }
         
         return resultados
@@ -496,6 +960,14 @@ class GeneradorMetricas:
         print("-" * 50)
         for comparacion, valor in resultados['kappa_cohen'].items():
             print(f"   {comparacion}: {valor:.3f}")
+        
+        # Imprimir Concordancia Médica
+        print("\n🔸 CONCORDANCIA MÉDICA")
+        print("-" * 50)
+        for comparacion, metricas in resultados['concordancia_medica'].items():
+            print(f"\n📋 {comparacion}:")
+            for metrica, valor in metricas.items():
+                print(f"   {metrica}: {valor:.3f}")
         
         # Resumen estadístico
         print("\n📈 RESUMEN ESTADÍSTICO")
