@@ -1,0 +1,210 @@
+@startuml Figura 5.10: Esquema del Proceso de Análisis Semántico para Similitud
+!theme plain
+skinparam backgroundColor #FFFFFF
+skinparam componentStyle rectangle
+skinparam rectangle {
+    BackgroundColor #E8F4FD
+    BorderColor #2E86AB
+}
+skinparam note {
+    BackgroundColor #FFF2CC
+    BorderColor #D6B656
+}
+
+title Figura 5.10: Esquema del Proceso de Análisis Semántico para Similitud
+
+' === COMPONENTES PRINCIPALES ===
+package "Sistema de Análisis Médico" {
+    rectangle "Texto Médico Original" as TM <<input>> {
+        [Datos del Paciente]
+        [Resultados de Laboratorio]
+        [Diagnósticos del Sistema]
+    }
+    
+    rectangle "Análisis de IA" as AI <<input>> {
+        [Análisis DeepSeek]
+        [Análisis Gemini]
+        [Resumen Ejecutivo]
+    }
+}
+
+package "Procesamiento de Texto" {
+    rectangle "Preprocesamiento" as PP {
+        [Extracción de Contenido]
+        [Limpieza de Texto]
+        [Normalización]
+        [Truncamiento (1500 chars)]
+    }
+    
+    rectangle "Creación de Prompt" as CP {
+        [Formato Estructurado]
+        [Instrucciones Específicas]
+        [Ejemplos de Respuesta]
+        [Validación de Contenido]
+    }
+}
+
+package "Análisis Semántico" {
+    rectangle "DeepSeek API" as DS {
+        [Modelo: deepseek-chat]
+        [Temperatura: 0.1]
+        [Max Tokens: 10]
+        [Timeout: 15s]
+    }
+    
+    rectangle "Procesamiento de Respuesta" as PR {
+        [Validación Numérica]
+        [Normalización (0.0-1.0)]
+        [Manejo de Errores]
+        [Retorno de Resultado]
+    }
+}
+
+package "Cálculo de Similitud" {
+    rectangle "Análisis Semántico" as AS {
+        [Comparación Contextual]
+        [Evaluación de Diagnósticos]
+        [Análisis de Recomendaciones]
+        [Coherencia Médica]
+    }
+    
+    rectangle "Validación de Resultado" as VR {
+        [Rango 0.0-1.0]
+        [Solo Números Decimales]
+        [Manejo de Errores]
+        [Retorno Seguro]
+    }
+}
+
+package "Métricas de Concordancia" {
+    rectangle "Similitud Semántica" as SS {
+        [Rango: 0.0 - 1.0]
+        [Precisión: 0.85-0.95]
+        [Consistencia: Media]
+    }
+    
+    rectangle "Índice de Kappa" as KAPPA {
+        [Concordancia Observada]
+        [Concordancia Esperada]
+        [Rango: -1.0 - 1.0]
+    }
+    
+    rectangle "Similitud Jaccard" as JACCARD {
+        [Intersección de Conjuntos]
+        [Unión de Conjuntos]
+        [Rango: 0.0 - 1.0]
+    }
+}
+
+' === FLUJOS PRINCIPALES ===
+TM --> PP : "Texto Médico\n(JSON + Diagnósticos)"
+AI --> PP : "Análisis de IA\n(Texto Libre)"
+
+PP --> CP : "Texto Limpio\n(1500 chars max)"
+CP --> DS : "Prompt Estructurado\n(Instrucciones + Textos)"
+
+DS --> PR : "Respuesta Numérica\n(0.0 - 1.0)"
+PR --> AS : "Puntuación Validada\n(Similitud Semántica)"
+
+AS --> SS : "Puntuación Final\n(0.0 - 1.0)"
+SS --> KAPPA : "Métricas de Similitud"
+SS --> JACCARD : "Métricas de Similitud"
+
+' === FLUJOS DE DATOS DETALLADOS ===
+note right of PP
+**Preprocesamiento:**
+1. Extraer SECCION_REPORTE_COMPLETO
+2. Limpiar caracteres especiales
+3. Normalizar formato
+4. Truncar a 1500 caracteres
+5. Validar contenido
+end note
+
+note right of CP
+**Creación de Prompt:**
+1. Formato estructurado para comparación
+2. Instrucciones específicas de análisis
+3. Ejemplos de respuesta esperada
+4. Validación de contenido médico
+end note
+
+note right of DS
+**DeepSeek API:**
+- Modelo: deepseek-chat
+- Temperatura: 0.1 (consistencia)
+- Max tokens: 10 (solo número)
+- Timeout: 15 segundos
+- Análisis semántico avanzado
+end note
+
+note right of PR
+**Procesamiento de Respuesta:**
+- Validación de formato numérico
+- Limpieza de caracteres especiales
+- Normalización a rango [0.0, 1.0]
+- Manejo de errores y timeouts
+end note
+
+note right of AS
+**Análisis Semántico:**
+- Comparación contextual de diagnósticos
+- Evaluación de recomendaciones
+- Análisis de coherencia médica
+- Puntuación de similitud final
+end note
+
+' === CASOS DE USO ===
+rectangle "Casos de Uso" as CU {
+    [Comparación Médico vs IA]
+    [Comparación entre IAs]
+    [Validación de Diagnósticos]
+    [Métricas de Concordancia]
+}
+
+SS --> CU : "Puntuaciones de Similitud"
+KAPPA --> CU : "Índices de Concordancia"
+JACCARD --> CU : "Similitudes de Conjuntos"
+
+' === CONFIGURACIÓN TÉCNICA ===
+note bottom of DS
+**Configuración DeepSeek:**
+- URL: https://api.deepseek.com/chat/completions
+- Model: deepseek-chat
+- Temperature: 0.1
+- Max Tokens: 10
+- Timeout: 15 segundos
+- API Key: DEEPSEEK_API_KEY
+end note
+
+note bottom of PR
+**Manejo de Errores:**
+- Timeout: Retorna 0.0
+- Error de red: Retorna 0.0
+- Respuesta inválida: Retorna 0.0
+- Validación: Solo números y puntos
+end note
+
+' === MEJORAS FUTURAS ===
+rectangle "Mejoras Futuras" as MF {
+    [Caché de Resultados]
+    [Procesamiento en Lote]
+    [Modelos Especializados]
+    [Fine-tuning Médico]
+    [Optimización de Prompts]
+}
+
+AS --> MF : "Optimizaciones"
+PR --> MF : "Mejoras de Rendimiento"
+
+' === DEPENDENCIAS ===
+note left of TM
+**Dependencias del Sistema:**
+- Python 3.x
+- NumPy (cálculos numéricos)
+- Requests (APIs externas)
+- Regex (procesamiento texto)
+- DeepSeek API (análisis semántico)
+- JSON (manejo de datos)
+end note
+
+@enduml

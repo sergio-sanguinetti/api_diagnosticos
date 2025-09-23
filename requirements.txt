@@ -5,4 +5,5 @@ google-generativeai
 gunicorn
 mysql-connector-python
 requests
-numpy 
+numpy
+scikit-learn 

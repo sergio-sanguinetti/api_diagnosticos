@@ -1,0 +1,107 @@
+{
+  "jaccard": {
+    "Obesidad Mórbida": {
+      "medico_vs_deepseek_diag": 0.3333333333333333,
+      "medico_vs_gemini_diag": 0.3333333333333333,
+      "deepseek_vs_gemini_diag": 1.0,
+      "medico_vs_deepseek_rec": 0.25,
+      "medico_vs_gemini_rec": 0.0,
+      "deepseek_vs_gemini_rec": 0.0
+    },
+    "Ametropía Corregida": {
+      "medico_vs_deepseek_diag": 0.0,
+      "medico_vs_gemini_diag": 0.0,
+      "deepseek_vs_gemini_diag": 1.0,
+      "medico_vs_deepseek_rec": 0.0,
+      "medico_vs_gemini_rec": 0.0,
+      "deepseek_vs_gemini_rec": 1.0
+    },
+    "Linfopenia": {
+      "medico_vs_deepseek_diag": 0.0,
+      "medico_vs_gemini_diag": 0.0,
+      "deepseek_vs_gemini_diag": 1.0,
+      "medico_vs_deepseek_rec": 0.25,
+      "medico_vs_gemini_rec": 0.0,
+      "deepseek_vs_gemini_rec": 0.0
+    },
+    "Hipotiroidismo No Especificado": {
+      "medico_vs_deepseek_diag": 0.0,
+      "medico_vs_gemini_diag": 0.0,
+      "deepseek_vs_gemini_diag": 1.0,
+      "medico_vs_deepseek_rec": 0.0,
+      "medico_vs_gemini_rec": 0.0,
+      "deepseek_vs_gemini_rec": 1.0
+    },
+    "Prediabetes/Glucosa Elevada": {
+      "medico_vs_deepseek_diag": 0.0,
+      "medico_vs_gemini_diag": 0.0,
+      "deepseek_vs_gemini_diag": 0.0,
+      "medico_vs_deepseek_rec": 0.0,
+      "medico_vs_gemini_rec": 0.0,
+      "deepseek_vs_gemini_rec": 0.0
+    },
+    "Hipotiroidismo No Especificado (2)": {
+      "medico_vs_deepseek_diag": 0.0,
+      "medico_vs_gemini_diag": 0.0,
+      "deepseek_vs_gemini_diag": 1.0,
+      "medico_vs_deepseek_rec": 1.0,
+      "medico_vs_gemini_rec": 1.0,
+      "deepseek_vs_gemini_rec": 1.0
+    }
+  },
+  "cosenos": {
+    "Obesidad Mórbida": {
+      "medico_vs_deepseek_diag": 0.20199309249791833,
+      "medico_vs_gemini_diag": 0.20199309249791833,
+      "deepseek_vs_gemini_diag": 1.0000000000000002,
+      "medico_vs_deepseek_rec": 0.0,
+      "medico_vs_gemini_rec": 0.0,
+      "deepseek_vs_gemini_rec": 0.06804963087832473
+    },
+    "Ametropía Corregida": {
+      "medico_vs_deepseek_diag": 0.0,
+      "medico_vs_gemini_diag": 0.0,
+      "deepseek_vs_gemini_diag": 1.0,
+      "medico_vs_deepseek_rec": 0.0,
+      "medico_vs_gemini_rec": 0.0,
+      "deepseek_vs_gemini_rec": 1.0
+    },
+    "Linfopenia": {
+      "medico_vs_deepseek_diag": 0.0,
+      "medico_vs_gemini_diag": 0.0,
+      "deepseek_vs_gemini_diag": 1.0,
+      "medico_vs_deepseek_rec": 0.1595519155841406,
+      "medico_vs_gemini_rec": 0.0,
+      "deepseek_vs_gemini_rec": 0.0
+    },
+    "Hipotiroidismo No Especificado": {
+      "medico_vs_deepseek_diag": 0.0,
+      "medico_vs_gemini_diag": 0.0,
+      "deepseek_vs_gemini_diag": 1.0,
+      "medico_vs_deepseek_rec": 0.0,
+      "medico_vs_gemini_rec": 0.0,
+      "deepseek_vs_gemini_rec": 1.0
+    },
+    "Prediabetes/Glucosa Elevada": {
+      "medico_vs_deepseek_diag": 0.0,
+      "medico_vs_gemini_diag": 0.0,
+      "deepseek_vs_gemini_diag": 0.0,
+      "medico_vs_deepseek_rec": 0.0,
+      "medico_vs_gemini_rec": 0.0,
+      "deepseek_vs_gemini_rec": 0.0
+    },
+    "Hipotiroidismo No Especificado (2)": {
+      "medico_vs_deepseek_diag": 0.0,
+      "medico_vs_gemini_diag": 0.0,
+      "deepseek_vs_gemini_diag": 1.0000000000000002,
+      "medico_vs_deepseek_rec": 1.0,
+      "medico_vs_gemini_rec": 1.0,
+      "deepseek_vs_gemini_rec": 1.0
+    }
+  },
+  "kappa_cohen": {
+    "medico_vs_deepseek": 0.0,
+    "medico_vs_gemini": 0.0,
+    "deepseek_vs_gemini": 0.6923076923076923
+  }
+}

@@ -1,0 +1,81 @@
+@startuml
+!theme plain
+
+<style>
+' Estilo general para un look limpio
+root {
+  shadowing false
+}
+' Estilo para el actor
+actor {
+  BackgroundColor #D1E8FF
+  BorderColor #1E5288
+}
+' Estilo para los servicios en la nube
+cloud {
+  BackgroundColor #F5F5F5
+  BorderColor #888888
+}
+' Estilo para la base de datos
+database {
+  BackgroundColor #FFF2CC
+  BorderColor #D6B656
+}
+' --- Estilos para cada sistema usando "estereotipos" ---
+' Paquete y rectángulos del sistema PHP
+package.php, rectangle.php {
+  BackgroundColor #E3F2FD
+  BorderColor #5D52A8
+}
+' Paquete y rectángulos del sistema Python
+package.python, rectangle.python {
+  BackgroundColor #FFF3E0
+  BorderColor #D6B656
+}
+' Paquete de servicios externos
+package.externals {
+    BackgroundColor #F5F5F5
+    BorderColor #888888
+}
+</style>
+
+' --- Componentes del Diagrama ---
+actor "Médico / Gestor" as User
+
+package "Sistema de Gestión (PHP)" <<php>> {
+  rectangle "Frontend / Vista" as FV <<php>>
+  rectangle "Backend / Controlador" as BC <<php>>
+}
+
+package "API de Análisis (Python)" <<python>> {
+  rectangle "API Endpoint (Flask)" as API <<python>>
+  rectangle "Motor de Análisis y Métricas" as MA <<python>>
+  rectangle "Generador de PDF" as GPDF <<python>>
+}
+
+package "Servicios Externos" <<externals>> {
+    cloud "Google Gemini API" as GAPI
+    cloud "DeepSeek API" as DAPI
+}
+
+database "MySQL" as DB
+
+' --- Flujos con Flechas Coloreadas ---
+User -[#1565C0]d-> FV : 1. Solicita Reporte
+FV -[#1565C0]d-> BC : 2. Petición Interna
+BC -[#1565C0]d-> API : 3. Petición POST
+
+API -[#1565C0]d-> MA : 4. Orquesta el Análisis
+MA -[#1565C0]d-> GAPI : 5. Consulta IA
+MA -[#1565C0]d-> DAPI : 6. Consulta IA
+MA -[#1565C0]d-> DB : 7. Guarda y consulta datos
+
+MA -[#1565C0]d-> GPDF : 8. Solicita creación de PDF
+GPDF -[#1565C0]r-> DB : 9. Obtiene datos finales
+
+GPDF .[#2E7D32]u.> API : 10. Entrega PDF generado
+API .[#2E7D32]u.> BC : 11. Devuelve Reporte.pdf
+BC .[#2E7D32]u.> FV : 12. Ofrece descarga al usuario
+FV .[#2E7D32]u.> User : 13. Descarga Reporte.pdf
+
+@enduml

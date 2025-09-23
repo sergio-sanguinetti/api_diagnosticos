@@ -1,0 +1,220 @@
+@startuml Figura 5.10 Detalle: Proceso de Análisis Semántico para Similitud
+!theme plain
+skinparam backgroundColor #FFFFFF
+skinparam activity {
+    BackgroundColor #E8F4FD
+    BorderColor #2E86AB
+    FontColor #2E86AB
+}
+skinparam activityDiamond {
+    BackgroundColor #FFF2CC
+    BorderColor #D6B656
+}
+skinparam note {
+    BackgroundColor #FFF2CC
+    BorderColor #D6B656
+}
+
+title Figura 5.10 Detalle: Proceso de Análisis Semántico para Similitud
+
+start
+
+:Entrada: Texto Médico y Análisis de IA;
+
+partition "FASE 1: PREPROCESAMIENTO" {
+    :Extraer contenido médico;
+    note right
+        **Función:** extract_medical_content()
+        **Búsqueda:** SECCION_REPORTE_COMPLETO
+        **Patrón:** regex con marcadores SECCION_FIN
+    end note
+    
+    :Validar contenido extraído;
+    if (¿Contenido válido?) then (Sí)
+        :Continuar procesamiento;
+    else (No)
+        :Retornar error;
+        stop
+    endif
+    
+    :Limpiar y normalizar texto;
+    note right
+        **Operaciones:**
+        - Eliminar caracteres especiales
+        - Normalizar formato
+        - Convertir a minúsculas
+        - Eliminar espacios extra
+    end note
+    
+    :Truncar a 1500 caracteres;
+    note right
+        **Límite:** 1500 caracteres máximo
+        **Razón:** Evitar requests muy grandes
+        **Método:** [:1500] + "..."
+    end note
+}
+
+partition "FASE 2: CREACIÓN DE PROMPT" {
+    :Crear prompt estructurado;
+    note right
+        **Formato:** Instrucciones + Análisis médico + Análisis IA
+        **Estructura:** TAREA + INSTRUCCIONES + FORMATO
+        **Validación:** Contenido médico específico
+    end note
+    
+    :Incluir instrucciones específicas;
+    note right
+        **Instrucciones:**
+        - Comparar diagnósticos mencionados
+        - Evaluar recomendaciones sugeridas
+        - Analizar hallazgos clave
+        - Verificar coherencia médica
+    end note
+    
+    :Definir formato de respuesta;
+    note right
+        **Formato esperado:** Solo número decimal (0.0-1.0)
+        **Ejemplo:** "0.75"
+        **Validación:** Sin explicaciones adicionales
+    end note
+}
+
+partition "FASE 3: ANÁLISIS CON DEEPSEEK" {
+    :Preparar request a DeepSeek API;
+    note right
+        **URL:** https://api.deepseek.com/chat/completions
+        **Headers:** Authorization: Bearer {DEEPSEEK_API_KEY}
+        **Model:** deepseek-chat
+        **Temperature:** 0.1
+        **Max Tokens:** 10
+    end note
+    
+    :Enviar request a API;
+    if (¿Request exitoso?) then (Sí)
+        :Procesar respuesta JSON;
+        note right
+            **Estructura respuesta:**
+            {
+                "choices": [
+                    {
+                        "message": {
+                            "content": "0.85"
+                        }
+                    }
+                ]
+            }
+        end note
+        
+        :Extraer puntuación numérica;
+        note right
+            **Proceso:** Limpiar caracteres especiales
+            **Validación:** Solo números y puntos
+            **Rango:** [0.0, 1.0]
+        end note
+    else (No)
+        :Manejar error de API;
+        note right
+            **Errores comunes:**
+            - Timeout (15s)
+            - Error de red
+            - Respuesta inválida
+            - API key inválida
+        end note
+        
+        :Retornar valor por defecto (0.0);
+        stop
+    endif
+}
+
+partition "FASE 4: VALIDACIÓN Y NORMALIZACIÓN" {
+    :Validar respuesta numérica;
+    note right
+        **Validaciones:**
+        - Solo números y puntos
+        - Rango [0.0, 1.0]
+        - Conversión a float
+        - Manejo de errores
+    end note
+    
+    :Normalizar resultado;
+    note right
+        **Proceso:**
+        - Asegurar rango [0.0, 1.0]
+        - Aplicar max(0.0, min(1.0, valor))
+        - Retornar valor final
+    end note
+    
+    :Manejar casos especiales;
+    note right
+        **Casos especiales:**
+        - Respuesta vacía → 0.0
+        - Caracteres inválidos → 0.0
+        - Fuera de rango → Clamp
+        - Error de conversión → 0.0
+    end note
+}
+
+partition "FASE 5: MÉTRICAS ADICIONALES" {
+    :Calcular Índice de Kappa Cohen;
+    note right
+        **Fórmula:** κ = (Po - Pe) / (1 - Pe)
+        **Po:** Probabilidad acuerdo observado
+        **Pe:** Probabilidad acuerdo esperado (0.5)
+    end note
+    
+    :Calcular Similitud de Jaccard;
+    note right
+        **Fórmula:** J(A,B) = |A ∩ B| / |A ∪ B|
+        **A, B:** Conjuntos de términos médicos
+    end note
+    
+    :Generar métricas consolidadas;
+    note right
+        **Métricas incluidas:**
+        - Similitud semántica
+        - Índice de Kappa
+        - Similitud de Jaccard
+        - Tiempo de procesamiento
+    end note
+}
+
+:Retornar resultados;
+note right
+    **Estructura de salida:**
+    {
+        "semantic_similarity": 0.85,
+        "kappa_cohen": 0.72,
+        "jaccard_similarity": 0.68,
+        "processing_time": 3.2,
+        "method_used": "deepseek_api"
+    }
+end note
+
+stop
+
+' === NOTAS TÉCNICAS ===
+note bottom
+**Configuración del Sistema:**
+- Modelo: deepseek-chat
+- Temperatura: 0.1 (consistencia)
+- Max Tokens: 10 (solo número)
+- Timeout: 15 segundos
+- Entrenamiento: Conversacional
+- Idiomas: Multilingüe (incluye español)
+
+**Limitaciones Actuales:**
+- Dependencia de API externa (DeepSeek)
+- Timeout de 15 segundos
+- Límite de 1500 caracteres
+- Rate limiting de APIs
+- Costo por token utilizado
+
+**Mejoras Futuras:**
+- Caché de resultados calculados
+- Procesamiento en lote
+- Modelos especializados en medicina
+- Optimización de prompts
+- Implementación de fallbacks locales
+end note
+
+@enduml

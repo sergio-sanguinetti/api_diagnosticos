@@ -1,0 +1,178 @@
+@startuml Figura 5.10 Secuencia: Proceso de Análisis Semántico para Similitud
+!theme plain
+skinparam backgroundColor #FFFFFF
+skinparam sequence {
+    ArrowColor #2E86AB
+    LifeLineBackgroundColor #E8F4FD
+    LifeLineBorderColor #2E86AB
+    ParticipantBorderColor #2E86AB
+    ParticipantBackgroundColor #F0F8FF
+}
+
+title Figura 5.10 Secuencia: Proceso de Análisis Semántico para Similitud
+
+actor "Sistema Médico" as SM
+participant "Motor de Análisis" as MA
+participant "Preprocesador" as PP
+participant "Creador de Prompt" as CP
+participant "DeepSeek API" as DS
+participant "Validador de Respuesta" as VR
+participant "Calculador de Similitud" as CS
+
+== FASE 1: PREPROCESAMIENTO ==
+
+SM -> MA: Texto médico + Análisis IA
+activate MA
+
+MA -> PP: extract_medical_content(texto_medico)
+activate PP
+
+PP -> PP: Buscar SECCION_REPORTE_COMPLETO
+note right: Regex: r'SECCION_REPORTE_COMPLETO\n(.*?)\nSECCION_FIN'
+
+PP -> PP: Validar contenido extraído
+alt Contenido válido
+    PP -> PP: Limpiar caracteres especiales
+    PP -> PP: Normalizar formato
+    PP -> PP: Truncar a 1500 caracteres
+    PP --> MA: Contenido preprocesado
+else Contenido inválido
+    PP --> MA: Error: "No se encontró SECCION_REPORTE_COMPLETO"
+end
+deactivate PP
+
+== FASE 2: CREACIÓN DE PROMPT ==
+
+MA -> CP: create_prompt(contenido_limpio, texto_ia)
+activate CP
+
+CP -> CP: Crear prompt estructurado
+note right: Formato: TAREA + INSTRUCCIONES + FORMATO
+note right: Incluye análisis médico + análisis IA
+
+CP -> CP: Incluir instrucciones específicas
+note right: - Comparar diagnósticos mencionados
+note right: - Evaluar recomendaciones sugeridas
+note right: - Analizar hallazgos clave
+note right: - Verificar coherencia médica
+
+CP -> CP: Definir formato de respuesta
+note right: Solo número decimal (0.0-1.0)
+note right: Ejemplo: "0.75"
+note right: Sin explicaciones adicionales
+
+CP --> MA: Prompt estructurado
+deactivate CP
+
+== FASE 3: ANÁLISIS CON DEEPSEEK ==
+
+MA -> DS: POST /chat/completions
+activate DS
+note right: URL: https://api.deepseek.com/chat/completions
+note right: Headers: Authorization: Bearer {DEEPSEEK_API_KEY}
+note right: Model: deepseek-chat
+note right: Temperature: 0.1
+note right: Max Tokens: 10
+note right: Timeout: 15s
+
+alt Request exitoso
+    DS -> DS: Procesar con deepseek-chat
+    note right: Análisis semántico contextual
+    note right: Comparación de diagnósticos
+    note right: Evaluación de coherencia médica
+    
+    DS --> MA: JSON con respuesta
+    note right: Estructura: {"choices": [{"message": {"content": "0.85"}}]}
+    
+    MA -> VR: validate_response(respuesta)
+    activate VR
+    VR -> VR: Validar formato numérico
+    note right: Solo números y puntos
+    note right: Rango [0.0, 1.0]
+    note right: Conversión a float
+    
+    VR --> MA: Puntuación validada
+    deactivate VR
+    
+else Request fallido
+    DS --> MA: Error (timeout/red/invalid key)
+    MA -> MA: Usar valor por defecto (0.0)
+    note right: Manejo de errores implementado
+end
+deactivate DS
+
+== FASE 4: CÁLCULO DE SIMILITUD ==
+
+MA -> CS: calculate_semantic_similarity(puntuacion_validada)
+activate CS
+
+CS -> CS: Normalizar resultado final
+note right: Asegurar rango [0.0, 1.0]
+note right: Aplicar max(0.0, min(1.0, valor))
+note right: Retornar valor final
+
+CS -> CS: Manejar casos especiales
+note right: Respuesta vacía → 0.0
+note right: Caracteres inválidos → 0.0
+note right: Fuera de rango → Clamp
+note right: Error de conversión → 0.0
+
+== FASE 5: MÉTRICAS ADICIONALES ==
+
+CS -> CS: Calcular Índice de Kappa Cohen
+note right: Fórmula: κ = (Po - Pe) / (1 - Pe)
+note right: Po: Probabilidad acuerdo observado
+note right: Pe: Probabilidad acuerdo esperado (0.5)
+
+CS -> CS: Calcular Similitud de Jaccard
+note right: Fórmula: J(A,B) = |A ∩ B| / |A ∪ B|
+note right: A, B: Conjuntos de términos médicos
+
+CS -> CS: Generar métricas consolidadas
+note right: Incluye:
+note right: - Similitud semántica
+note right: - Índice de Kappa
+note right: - Similitud de Jaccard
+note right: - Tiempo de procesamiento
+
+CS --> MA: Resultados de similitud
+note right: Estructura:
+note right: {
+note right:   "semantic_similarity": 0.85,
+note right:   "kappa_cohen": 0.72,
+note right:   "jaccard_similarity": 0.68,
+note right:   "processing_time": 3.2,
+note right:   "method_used": "deepseek_api"
+note right: }
+deactivate CS
+
+MA --> SM: Métricas de concordancia
+deactivate MA
+
+== NOTAS TÉCNICAS ==
+
+note over SM, DS
+**Configuración del Sistema:**
+- Modelo: deepseek-chat
+- Temperatura: 0.1 (consistencia)
+- Max Tokens: 10 (solo número)
+- Timeout: 15 segundos
+- Entrenamiento: Conversacional
+- Idiomas: Multilingüe (incluye español)
+
+**Limitaciones Actuales:**
+- Dependencia de API externa (DeepSeek)
+- Timeout de 15 segundos
+- Límite de 1500 caracteres
+- Rate limiting de APIs
+- Costo por token utilizado
+
+**Mejoras Futuras:**
+- Caché de resultados calculados
+- Procesamiento en lote
+- Modelos especializados en medicina
+- Optimización de prompts
+- Implementación de fallbacks locales
+end note
+
+@enduml
