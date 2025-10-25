@@ -2036,10 +2036,36 @@ def calculate_metrics_from_pairs(medico_pairs, deepseek_pairs, gemini_pairs):
     try:
         print("🔍 Calculando métricas desde pares extraídos...")
         
-        # Convertir pares a texto para cálculo de métricas
-        medico_text = " ".join([f"{diag} {rec}" for diag, rec in medico_pairs])
-        deepseek_text = " ".join([f"{diag} {rec}" for diag, rec in deepseek_pairs])
-        gemini_text = " ".join([f"{diag} {rec}" for diag, rec in gemini_pairs])
+        # Convertir pares a texto con formato correcto para las funciones de métricas
+        def format_pairs_as_text(pairs, source_name):
+            """Convierte pares a texto con formato correcto para métricas."""
+            if not pairs:
+                return ""
+            
+            text_parts = []
+            
+            # Agregar sección de diagnósticos
+            text_parts.append("SECCION_DIAGNOSTICOS_SISTEMA")
+            for i, (diag, rec) in enumerate(pairs):
+                if diag.lower().strip() != "sin diagnóstico":
+                    text_parts.append(f"- Diagnóstico: {diag}")
+                    text_parts.append(f"  Recomendación: {rec}")
+            
+            text_parts.append("SECCION_FIN")
+            
+            # Agregar sección de reporte completo para similitud semántica
+            text_parts.append("SECCION_REPORTE_COMPLETO")
+            text_parts.append(f"Análisis de {source_name}:")
+            for diag, rec in pairs:
+                if diag.lower().strip() != "sin diagnóstico":
+                    text_parts.append(f"• {diag}: {rec}")
+            text_parts.append("SECCION_FIN")
+            
+            return "\n".join(text_parts)
+        
+        medico_text = format_pairs_as_text(medico_pairs, "Médico")
+        deepseek_text = format_pairs_as_text(deepseek_pairs, "DeepSeek")
+        gemini_text = format_pairs_as_text(gemini_pairs, "Gemini")
         
         print(f"📊 Pares del médico: {len(medico_pairs)}")
         print(f"📊 Pares de DeepSeek: {len(deepseek_pairs)}")
