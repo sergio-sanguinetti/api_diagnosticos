@@ -677,11 +677,12 @@ def extract_diagnosis_recommendation_pairs_with_gemini(text, source_name, api_ke
         3. NO extraigas diagnósticos sin recomendación asociada
         4. NO extraigas recomendaciones sin diagnóstico específico
         5. Extrae EXACTAMENTE como aparecen mencionados en el texto
-        6. Máximo 8 pares
+        6. Extrae TODOS los diagnósticos médicos válidos que encuentres (sin límite artificial)
         7. Si no hay pares específicos, devuelve lista vacía
         8. Maneja diferentes formatos: "Diagnóstico: X\nRecomendación: Y" o "X | Y" o texto narrativo
-        9. Busca términos médicos como: hipertensión, diabetes, dislipidemia, gastritis, anemia, sobrepeso, obesidad, bradicardia, policitemia, trigliceridemia, hiperlipidemia, colesterol
+        9. Busca términos médicos como: hipertensión, diabetes, dislipidemia, gastritis, anemia, sobrepeso, obesidad, bradicardia, policitemia, trigliceridemia, hiperlipidemia, colesterol, dolor articular, traumatología
         10. IMPORTANTE: Si encuentras diagnósticos médicos válidos, DEBES extraerlos aunque no tengan recomendaciones explícitas. En ese caso, crea recomendaciones médicas apropiadas.
+        11. PRIORIDAD: Es mejor extraer más diagnósticos que menos. Si tienes dudas, incluye el diagnóstico.
         
         **TEXTO A ANALIZAR**:
         {text}
@@ -730,7 +731,7 @@ def extract_diagnosis_recommendation_pairs_with_gemini(text, source_name, api_ke
         pairs = deduplicate_similar_diagnoses(pairs)
         
         print(f"📊 Total de pares extraídos de {source_name}: {len(pairs)}")
-        return pairs[:8]  # Limitar a 8 pares máximo
+        return pairs[:15]  # Aumentar límite a 15 pares máximo
         
     except Exception as e:
         error_msg = str(e)
@@ -788,8 +789,8 @@ def extract_pairs_alternative_method(text, source_name):
                 pairs.append((diagnosis.capitalize(), recommendation))
                 print(f"✅ Par alternativo extraído: {diagnosis.capitalize()} -> {recommendation}")
         
-        # Limitar a 5 pares para el método alternativo
-        return pairs[:5]
+        # Limitar a 10 pares para el método alternativo
+        return pairs[:10]
         
     except Exception as e:
         print(f"❌ Error en método alternativo para {source_name}: {e}")
@@ -861,7 +862,7 @@ def extract_medico_pairs_from_structured_text(medico_text):
         pairs = deduplicate_similar_diagnoses(pairs)
         
         print(f"📊 Total de pares válidos extraídos: {len(pairs)}")
-        return pairs[:8]  # Limitar a 8 pares máximo
+        return pairs[:15]  # Aumentar límite a 15 pares máximo
         
     except Exception as e:
         print(f"❌ Error extrayendo pares del sistema médico: {e}")
@@ -986,7 +987,7 @@ def extract_fallback_pairs_from_text(text, source_name):
         pairs = deduplicate_similar_diagnoses(pairs)
         
         print(f"📊 Total de pares de respaldo para {source_name}: {len(pairs)}")
-        return pairs[:5]  # Limitar a 5 pares para respaldo
+        return pairs[:10]  # Aumentar límite a 10 pares para respaldo
         
     except Exception as e:
         print(f"❌ Error en extracción de respaldo para {source_name}: {e}")
@@ -1104,13 +1105,12 @@ def deduplicate_similar_diagnoses(pairs):
     return deduplicated_pairs
 
 def filter_ophthalmology_diagnoses(pairs):
-    """Filtra diagnósticos relacionados con oftalmología."""
+    """Filtra diagnósticos relacionados con oftalmología (versión menos restrictiva)."""
+    # Solo filtrar diagnósticos claramente oftalmológicos, no relacionados con salud general
     ophthalmology_keywords = [
-        'oftalmología', 'oftalmologico', 'oftalmologica',
         'ametropia', 'ametropía', 'corregida', 'corregido',
-        'lentes', 'gafas', 'anteojos', 'visión', 'visual',
-        'ocular', 'ojo', 'ojos', 'miopía', 'hipermetropía',
-        'astigmatismo', 'demanda visual', 'salud ocular'
+        'lentes', 'gafas', 'anteojos', 'miopía', 'hipermetropía',
+        'astigmatismo', 'demanda visual'
     ]
     
     filtered_pairs = []
@@ -1118,11 +1118,17 @@ def filter_ophthalmology_diagnoses(pairs):
         diagnosis_lower = diagnosis.lower()
         recommendation_lower = recommendation.lower()
         
-        # Verificar si contiene palabras clave oftalmológicas
+        # Solo filtrar si es claramente oftalmológico Y no es un diagnóstico médico importante
         is_ophthalmology = any(keyword in diagnosis_lower or keyword in recommendation_lower 
                               for keyword in ophthalmology_keywords)
         
-        if not is_ophthalmology:
+        # No filtrar si contiene términos médicos importantes
+        has_medical_importance = any(term in diagnosis_lower for term in [
+            'diabetes', 'hipertensión', 'anemia', 'colesterol', 'triglicéridos',
+            'sobrepeso', 'obesidad', 'gastritis', 'bradicardia', 'policitemia'
+        ])
+        
+        if not is_ophthalmology or has_medical_importance:
             filtered_pairs.append((diagnosis, recommendation))
         else:
             print(f"🚫 Filtrado diagnóstico oftalmológico: {diagnosis[:30]}...")
@@ -1130,9 +1136,10 @@ def filter_ophthalmology_diagnoses(pairs):
     return filtered_pairs
 
 def filter_administrative_diagnoses(pairs):
-    """Filtra diagnósticos administrativos como 'Ausencia de resultados'."""
+    """Filtra diagnósticos administrativos como 'Ausencia de resultados' (versión menos restrictiva)."""
+    # Solo filtrar diagnósticos claramente administrativos, no médicos
     administrative_keywords = [
-        'ausencia de resultados', 'perfil', 'análisis faltantes',
+        'ausencia de resultados', 'análisis faltantes',
         'programar urgentemente', 'exámenes pendientes',
         'resultados pendientes', 'laboratorio pendiente'
     ]
@@ -1142,11 +1149,18 @@ def filter_administrative_diagnoses(pairs):
         diagnosis_lower = diagnosis.lower()
         recommendation_lower = recommendation.lower()
         
-        # Verificar si contiene palabras clave administrativas
+        # Solo filtrar si es claramente administrativo Y no es un diagnóstico médico importante
         is_administrative = any(keyword in diagnosis_lower or keyword in recommendation_lower 
                                for keyword in administrative_keywords)
         
-        if not is_administrative:
+        # No filtrar si contiene términos médicos importantes
+        has_medical_importance = any(term in diagnosis_lower for term in [
+            'diabetes', 'hipertensión', 'anemia', 'colesterol', 'triglicéridos',
+            'sobrepeso', 'obesidad', 'gastritis', 'bradicardia', 'policitemia',
+            'dolor', 'articular', 'traumatología'
+        ])
+        
+        if not is_administrative or has_medical_importance:
             filtered_pairs.append((diagnosis, recommendation))
         else:
             print(f"🚫 Filtrado diagnóstico administrativo: {diagnosis[:30]}...")
@@ -1227,7 +1241,7 @@ def extract_ai_pairs_from_medico_data(medico_pairs, source_name):
         ai_pairs = deduplicate_similar_diagnoses(ai_pairs)
         
         print(f"📊 Total de pares generados para {source_name}: {len(ai_pairs)}")
-        return ai_pairs[:6]  # Limitar a 6 pares máximo
+        return ai_pairs[:10]  # Aumentar límite a 10 pares máximo
         
     except Exception as e:
         print(f"❌ Error generando pares para {source_name}: {e}")
@@ -1313,31 +1327,117 @@ class PDF(FPDF):
         
         # Crear diccionarios para organizar diagnósticos por similitud
         def normalize_diagnosis(diag):
-            """Normaliza diagnósticos para agrupar similares"""
-            diag_lower = diag.lower()
-            if 'hipertrigliceridemia' in diag_lower or 'trigliceridemia' in diag_lower or 'dislipidemia' in diag_lower:
-                return 'HIPERTRIGLICERIDEMIA'
-            elif 'hiperlipidemia' in diag_lower or 'colesterol' in diag_lower or 'ldl' in diag_lower:
-                return 'HIPERLIPIDEMIA'
-            elif 'policitemia' in diag_lower:
-                return 'POLICITEMIA'
-            elif 'sobrepeso' in diag_lower or 'obesidad' in diag_lower or 'imc' in diag_lower:
-                return 'SOBREPESO'
-            elif 'bradicardia' in diag_lower or 'cardiaco' in diag_lower:
-                return 'BRADICARDIA'
-            elif 'hdl' in diag_lower or 'deficiencia' in diag_lower:
-                return 'DEFICIENCIA_HDL'
-            elif 'diabetes' in diag_lower or 'glucosa' in diag_lower:
-                return 'DIABETES'
-            elif 'hipertensión' in diag_lower or 'presión' in diag_lower:
-                return 'HIPERTENSIÓN'
-            elif 'anemia' in diag_lower or 'hemoglobina' in diag_lower:
-                return 'ANEMIA'
-            elif 'gastritis' in diag_lower or 'gástrico' in diag_lower:
-                return 'GASTRITIS'
-            else:
-                # Para diagnósticos únicos, usar el nombre original pero normalizado
-                return diag.upper().strip()
+            """Normaliza diagnósticos para agrupar similares con algoritmo mejorado"""
+            if not diag or diag.strip() == '':
+                return 'SIN_DIAGNOSTICO'
+            
+            diag_lower = diag.lower().strip()
+            
+            # Remover caracteres especiales y espacios extra
+            diag_clean = re.sub(r'[^\w\s]', '', diag_lower)
+            diag_clean = re.sub(r'\s+', ' ', diag_clean).strip()
+            
+            # Mapeo de diagnósticos similares a categorías unificadas
+            diagnosis_mapping = {
+                # Anemia y hemoglobina
+                'anemia': 'ANEMIA',
+                'hemoglobina': 'ANEMIA',
+                'hemoglobina baja': 'ANEMIA',
+                'hemoglobina elevada': 'ANEMIA',
+                'anemia leve': 'ANEMIA',
+                'anemia moderada': 'ANEMIA',
+                'anemia severa': 'ANEMIA',
+                
+                # Dislipidemias
+                'hipertrigliceridemia': 'HIPERTRIGLICERIDEMIA',
+                'trigliceridemia': 'HIPERTRIGLICERIDEMIA',
+                'dislipidemia': 'HIPERTRIGLICERIDEMIA',
+                'trigliceridos altos': 'HIPERTRIGLICERIDEMIA',
+                'trigliceridos elevados': 'HIPERTRIGLICERIDEMIA',
+                
+                # Hiperlipidemias
+                'hiperlipidemia': 'HIPERLIPIDEMIA',
+                'colesterol': 'HIPERLIPIDEMIA',
+                'colesterol alto': 'HIPERLIPIDEMIA',
+                'colesterol elevado': 'HIPERLIPIDEMIA',
+                'ldl': 'HIPERLIPIDEMIA',
+                'ldl alto': 'HIPERLIPIDEMIA',
+                
+                # Policitemia
+                'policitemia': 'POLICITEMIA',
+                'policitemia secundaria': 'POLICITEMIA',
+                'hematocrito elevado': 'POLICITEMIA',
+                
+                # Sobrepeso y obesidad
+                'sobrepeso': 'SOBREPESO',
+                'obesidad': 'SOBREPESO',
+                'obesidad morbida': 'SOBREPESO',
+                'obesidad mórbida': 'SOBREPESO',
+                'imc': 'SOBREPESO',
+                'indice masa corporal': 'SOBREPESO',
+                
+                # Bradicardia
+                'bradicardia': 'BRADICARDIA',
+                'bradicardia sinusal': 'BRADICARDIA',
+                'cardiaco': 'BRADICARDIA',
+                'frecuencia cardiaca baja': 'BRADICARDIA',
+                
+                # Deficiencia HDL
+                'hdl': 'DEFICIENCIA_HDL',
+                'deficiencia': 'DEFICIENCIA_HDL',
+                'deficiencia hdl': 'DEFICIENCIA_HDL',
+                'hdl bajo': 'DEFICIENCIA_HDL',
+                'lipoproteinas hdl': 'DEFICIENCIA_HDL',
+                
+                # Diabetes
+                'diabetes': 'DIABETES',
+                'diabetes tipo 2': 'DIABETES',
+                'glucosa': 'DIABETES',
+                'glucosa elevada': 'DIABETES',
+                'glicemia': 'DIABETES',
+                'glicemia alta': 'DIABETES',
+                
+                # Hipertensión
+                'hipertension': 'HIPERTENSION',
+                'hipertensión': 'HIPERTENSION',
+                'presion': 'HIPERTENSION',
+                'presión': 'HIPERTENSION',
+                'presion arterial': 'HIPERTENSION',
+                'presión arterial': 'HIPERTENSION',
+                'presion arterial alta': 'HIPERTENSION',
+                'presión arterial alta': 'HIPERTENSION',
+                
+                # Gastritis
+                'gastritis': 'GASTRITIS',
+                'gastrico': 'GASTRITIS',
+                'gástrico': 'GASTRITIS',
+                'ulcera gastrica': 'GASTRITIS',
+                'úlcera gástrica': 'GASTRITIS',
+                
+                # Dolor articular
+                'dolor': 'DOLOR_ARTICULAR',
+                'dolor articular': 'DOLOR_ARTICULAR',
+                'dolor en articulacion': 'DOLOR_ARTICULAR',
+                'dolor en articulación': 'DOLOR_ARTICULAR',
+                'radiocarpiana': 'DOLOR_ARTICULAR',
+                'radiocarpiano': 'DOLOR_ARTICULAR',
+                'articulacion': 'DOLOR_ARTICULAR',
+                'articulación': 'DOLOR_ARTICULAR',
+                'traumatologia': 'DOLOR_ARTICULAR',
+                'traumatología': 'DOLOR_ARTICULAR',
+            }
+            
+            # Buscar coincidencias exactas primero
+            if diag_clean in diagnosis_mapping:
+                return diagnosis_mapping[diag_clean]
+            
+            # Buscar coincidencias parciales
+            for key, value in diagnosis_mapping.items():
+                if key in diag_clean or diag_clean in key:
+                    return value
+            
+            # Si no se encuentra coincidencia, usar el diagnóstico original normalizado
+            return diag_clean.upper().replace(' ', '_')
         
         # Organizar diagnósticos por categorías
         organized_diagnoses = {}
