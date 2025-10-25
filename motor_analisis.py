@@ -1211,7 +1211,7 @@ class PDF(FPDF):
             self.set_xy(x + w, y)
 
 def generate_pdf_in_memory(token, medico, deepseek, gemini, summary, comparison,metrics):
-    """Genera un PDF profesional multi-página en memoria con optimización de memoria."""
+    """Genera un PDF simplificado enfocado en análisis de IA y métricas."""
 
     pdf = PDF('P', 'mm', 'A4')
     pdf.alias_nb_pages()
@@ -1222,42 +1222,18 @@ def generate_pdf_in_memory(token, medico, deepseek, gemini, summary, comparison,
         deepseek = deepseek[:max_text_length] + "\n\n[Texto truncado por límite de memoria]"
     if len(gemini) > max_text_length:
         gemini = gemini[:max_text_length] + "\n\n[Texto truncado por límite de memoria]"
-    if len(summary) > max_text_length:
-        summary = summary[:max_text_length] + "\n\n[Texto truncado por límite de memoria]"
-    if len(comparison) > max_text_length:
-        comparison = comparison[:max_text_length] + "\n\n[Texto truncado por límite de memoria]"
 
-    # --- PÁGINA 1: DATOS Y DIAGNÓSTICOS DEL SISTEMA ---
+    # --- PÁGINA 1: ANÁLISIS DETALLADO DE DEEPSEEK ---
     pdf.add_page()
-    
-    info_paciente = re.search(r'SECCION_INFO_PACIENTE\n(.*?)\nSECCION_FIN', medico, re.DOTALL).group(1).strip()
-    hallazgos_clave = re.search(r'SECCION_HALLAZGOS_CLAVE\n(.*?)\nSECCION_FIN', medico, re.DOTALL).group(1).strip()
-    diagnosticos = re.search(r'SECCION_DIAGNOSTICOS_SISTEMA\n(.*?)\nSECCION_FIN', medico, re.DOTALL).group(1).strip()
+    pdf.section_title('Análisis Detallado de DeepSeek')
+    pdf.section_body(deepseek)
 
-    pdf.section_title('Datos del Paciente y Examen')
-    pdf.section_body(info_paciente)
-    
-    pdf.section_title('Resumen de Hallazgos Anormales (Sistema)')
-    pdf.section_body(hallazgos_clave)
-
-    pdf.section_title('Diagnósticos y Recomendaciones Registrados')
-    pdf.section_body(diagnosticos)
-
-    # --- PÁGINA 2: RESUMEN EJECUTIVO DE IA ---
+    # --- PÁGINA 2: ANÁLISIS DETALLADO DE GEMINI ---
     pdf.add_page()
-    pdf.section_title('Resumen Ejecutivo (Análisis Sintetizado por IA)')
-    pdf.section_body(summary)
+    pdf.section_title('Análisis Detallado de Gemini')
+    pdf.section_body(gemini)
 
-    # --- PÁGINA 3: ANÁLISIS IA (DISEÑO SECUENCIAL) ---
-    pdf.add_page(orientation='L')
-    pdf.print_comparison_layout('Análisis Detallado de DeepSeek', deepseek, 'Análisis Detallado de Gemini', gemini)
-    
-    # --- PÁGINA 4: COMPARACIÓN DETALLADA ---
-    pdf.add_page()
-    pdf.section_title('Análisis Comparativo Detallado de las IAs')
-    pdf.section_body(comparison)
-
-    # --- PÁGINA 5: TABLA COMPARATIVA DE DIAGNÓSTICOS Y RECOMENDACIONES (HORIZONTAL) ---
+    # --- PÁGINA 3: TABLA COMPARATIVA DE DIAGNÓSTICOS Y RECOMENDACIONES ---
     pdf.add_page(orientation='L')  # Página horizontal para mejor visualización
     
     # Extraer pares de diagnóstico-recomendación de cada fuente
@@ -1297,7 +1273,7 @@ def generate_pdf_in_memory(token, medico, deepseek, gemini, summary, comparison,
     # Crear la tabla comparativa unificada
     pdf.print_diagnosis_recommendation_comparison_table(medico_pairs, deepseek_pairs, gemini_pairs)
 
-    # --- PÁGINA 6: MÉTRICAS DE SIMILITUD Y CONCORDANCIA ---
+    # --- PÁGINA 4: MÉTRICAS DE SIMILITUD Y CONCORDANCIA ---
     pdf.add_page()
     pdf.section_title('Métricas de Similitud y Concordancia')
 
@@ -1305,7 +1281,7 @@ def generate_pdf_in_memory(token, medico, deepseek, gemini, summary, comparison,
     explanation = (
         "Esta sección presenta diversas métricas para evaluar la concordancia entre el análisis del médico "
         "y los análisis generados por cada IA. Las métricas incluyen:\n\n"
-        "• **Similitud Semántica**: Mide la concordancia en el significado usando vectores de texto\n"
+        "• **Similitud Semántica (Cosenos)**: Mide la concordancia en el significado usando vectores de texto\n"
         "• **Índice de Kappa Cohen**: Evalúa la concordancia entre evaluadores (médico vs IA)\n"
         "• **Similitud de Jaccard**: Compara la similitud de conjuntos de términos médicos\n\n"
         "Un puntaje más cercano a 1.0 indica una mayor concordancia."
@@ -1323,11 +1299,11 @@ def generate_pdf_in_memory(token, medico, deepseek, gemini, summary, comparison,
     
     # Crear tabla de métricas para DeepSeek
     deepseek_metrics_text = (
-        f"**Similitud Semántica**: {sim_deepseek:.4f} ({sim_deepseek*100:.2f}%)\n"
+        f"**Similitud de Cosenos**: {sim_deepseek:.4f} ({sim_deepseek*100:.2f}%)\n"
         f"**Índice de Kappa Cohen**: {kappa_deepseek:.4f} ({kappa_deepseek*100:.2f}%)\n"
         f"**Similitud de Jaccard**: {jaccard_deepseek:.4f} ({jaccard_deepseek*100:.2f}%)\n\n"
         f"**Interpretación**:\n"
-        f"• Similitud Semántica: {'Excelente' if sim_deepseek >= 0.8 else 'Buena' if sim_deepseek >= 0.6 else 'Moderada' if sim_deepseek >= 0.4 else 'Baja'}\n"
+        f"• Similitud de Cosenos: {'Excelente' if sim_deepseek >= 0.8 else 'Buena' if sim_deepseek >= 0.6 else 'Moderada' if sim_deepseek >= 0.4 else 'Baja'}\n"
         f"• Concordancia Kappa: {'Excelente' if kappa_deepseek >= 0.8 else 'Buena' if kappa_deepseek >= 0.6 else 'Moderada' if kappa_deepseek >= 0.4 else 'Baja'}\n"
         f"• Similitud Jaccard: {'Excelente' if jaccard_deepseek >= 0.8 else 'Buena' if jaccard_deepseek >= 0.6 else 'Moderada' if jaccard_deepseek >= 0.4 else 'Baja'}"
     )
@@ -1344,11 +1320,11 @@ def generate_pdf_in_memory(token, medico, deepseek, gemini, summary, comparison,
     
     # Crear tabla de métricas para Gemini
     gemini_metrics_text = (
-        f"**Similitud Semántica**: {sim_gemini:.4f} ({sim_gemini*100:.2f}%)\n"
+        f"**Similitud de Cosenos**: {sim_gemini:.4f} ({sim_gemini*100:.2f}%)\n"
         f"**Índice de Kappa Cohen**: {kappa_gemini:.4f} ({kappa_gemini*100:.2f}%)\n"
         f"**Similitud de Jaccard**: {jaccard_gemini:.4f} ({jaccard_gemini*100:.2f}%)\n\n"
         f"**Interpretación**:\n"
-        f"• Similitud Semántica: {'Excelente' if sim_gemini >= 0.8 else 'Buena' if sim_gemini >= 0.6 else 'Moderada' if sim_gemini >= 0.4 else 'Baja'}\n"
+        f"• Similitud de Cosenos: {'Excelente' if sim_gemini >= 0.8 else 'Buena' if sim_gemini >= 0.6 else 'Moderada' if sim_gemini >= 0.4 else 'Baja'}\n"
         f"• Concordancia Kappa: {'Excelente' if kappa_gemini >= 0.8 else 'Buena' if kappa_gemini >= 0.6 else 'Moderada' if kappa_gemini >= 0.4 else 'Baja'}\n"
         f"• Similitud Jaccard: {'Excelente' if jaccard_gemini >= 0.8 else 'Buena' if jaccard_gemini >= 0.6 else 'Moderada' if jaccard_gemini >= 0.4 else 'Baja'}"
     )
@@ -1362,11 +1338,11 @@ def generate_pdf_in_memory(token, medico, deepseek, gemini, summary, comparison,
     comparison_table_text = (
         "| Métrica | DeepSeek (deepseek-chat) | Gemini (gemini-flash-latest) |\n"
         "|---------|--------------------------|----------------------------|\n"
-        f"| **Similitud Semántica** | {sim_deepseek:.4f} ({sim_deepseek*100:.2f}%) | {sim_gemini:.4f} ({sim_gemini*100:.2f}%) |\n"
+        f"| **Similitud de Cosenos** | {sim_deepseek:.4f} ({sim_deepseek*100:.2f}%) | {sim_gemini:.4f} ({sim_gemini*100:.2f}%) |\n"
         f"| **Índice de Kappa Cohen** | {kappa_deepseek:.4f} ({kappa_deepseek*100:.2f}%) | {kappa_gemini:.4f} ({kappa_gemini*100:.2f}%) |\n"
         f"| **Similitud de Jaccard** | {jaccard_deepseek:.4f} ({jaccard_deepseek*100:.2f}%) | {jaccard_gemini:.4f} ({jaccard_gemini*100:.2f}%) |\n\n"
         "**Resumen de Rendimiento**:\n"
-        f"• **Mejor Similitud Semántica**: {'DeepSeek' if sim_deepseek > sim_gemini else 'Gemini' if sim_gemini > sim_deepseek else 'Empate'}\n"
+        f"• **Mejor Similitud de Cosenos**: {'DeepSeek' if sim_deepseek > sim_gemini else 'Gemini' if sim_gemini > sim_deepseek else 'Empate'}\n"
         f"• **Mejor Concordancia Kappa**: {'DeepSeek' if kappa_deepseek > kappa_gemini else 'Gemini' if kappa_gemini > kappa_deepseek else 'Empate'}\n"
         f"• **Mejor Similitud Jaccard**: {'DeepSeek' if jaccard_deepseek > jaccard_gemini else 'Gemini' if jaccard_gemini > jaccard_deepseek else 'Empate'}\n\n"
         f"**Puntuación Promedio**:\n"
