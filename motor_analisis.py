@@ -873,12 +873,12 @@ def extract_diagnoses_with_gemini(text, source_name, api_key):
         return []
 
 def extract_diagnosis_recommendation_pairs_with_gemini(text, source_name, api_key):
-    """Extrae pares de diagnóstico-recomendación usando Gemini API con un prompt especializado."""
+    """Extrae pares de diagnóstico-recomendación usando Gemini API con un prompt especializado y mecanismo de respaldo robusto."""
     try:
         # Si el texto contiene errores, no intentar extraer pares
         if "Error" in text or "❌" in text:
-            print(f"⚠️ Texto de {source_name} contiene errores, no se pueden extraer pares")
-            return []
+            print(f"⚠️ Texto de {source_name} contiene errores, usando función de respaldo")
+            return extract_fallback_pairs_from_text(text, source_name)
         
         print(f"🔍 Extrayendo pares de {source_name} con Gemini API...")
         print(f"📝 Texto a analizar (primeros 200 caracteres): {text[:200]}...")
@@ -902,6 +902,7 @@ def extract_diagnosis_recommendation_pairs_with_gemini(text, source_name, api_ke
         9. Busca términos médicos como: hipertensión, diabetes, dislipidemia, gastritis, anemia, sobrepeso, obesidad, bradicardia, policitemia, trigliceridemia, hiperlipidemia, colesterol, dolor articular, traumatología
         10. IMPORTANTE: Si encuentras diagnósticos médicos válidos, DEBES extraerlos aunque no tengan recomendaciones explícitas. En ese caso, crea recomendaciones médicas apropiadas.
         11. PRIORIDAD: Es mejor extraer más diagnósticos que menos. Si tienes dudas, incluye el diagnóstico.
+        12. CONSISTENCIA: Si encuentras múltiples diagnósticos similares, extrae el más específico y completo.
         
         **TEXTO A ANALIZAR**:
         {text}
@@ -923,8 +924,8 @@ def extract_diagnosis_recommendation_pairs_with_gemini(text, source_name, api_ke
         
         # Procesar la respuesta
         if "sin pares diagnóstico-recomendación" in result.lower():
-            print(f"⚠️ Gemini no encontró pares para {source_name}")
-            return []
+            print(f"⚠️ Gemini no encontró pares para {source_name}, usando función de respaldo")
+            return extract_fallback_pairs_from_text(text, source_name)
         
         # Dividir por líneas y procesar pares
         pairs = []
@@ -944,6 +945,11 @@ def extract_diagnosis_recommendation_pairs_with_gemini(text, source_name, api_ke
             print(f"🔍 Intentando extracción alternativa para {source_name}...")
             pairs = extract_pairs_alternative_method(text, source_name)
         
+        # Si aún no hay pares, usar función de respaldo
+        if not pairs:
+            print(f"🔧 Usando función de respaldo para {source_name}...")
+            pairs = extract_fallback_pairs_from_text(text, source_name)
+        
         # Aplicar filtros y deduplicación
         pairs = filter_ophthalmology_diagnoses(pairs)
         pairs = filter_administrative_diagnoses(pairs)
@@ -958,7 +964,10 @@ def extract_diagnosis_recommendation_pairs_with_gemini(text, source_name, api_ke
             print(f"⚠️ Cuota de Gemini API excedida para {source_name}, usando función de respaldo")
         else:
             print(f"❌ Error extrayendo pares diagnóstico-recomendación con Gemini para {source_name}: {e}")
-        return []
+        
+        # Usar función de respaldo en caso de error
+        print(f"🔧 Usando función de respaldo para {source_name} debido a error...")
+        return extract_fallback_pairs_from_text(text, source_name)
 
 def extract_pairs_alternative_method(text, source_name):
     """Método alternativo para extraer pares cuando el método principal falla."""
@@ -1117,7 +1126,8 @@ def extract_fallback_pairs_from_text(text, source_name):
             'gastritis', 'úlcera gástrica',
             'policitemia', 'hematocrito elevado',
             'deficiencia hdl', 'hdl bajo',
-            'trigliceridemia', 'hipertrigliceridemia'
+            'trigliceridemia', 'hipertrigliceridemia',
+            'dolor articular', 'dolor en articulación', 'radiocarpiana', 'traumatología'
         ]
         
         for term in medical_terms:
@@ -1160,6 +1170,8 @@ def extract_fallback_pairs_from_text(text, source_name):
                         recommendation = "Evaluación por medicina interna"
                     elif 'hdl' in term.lower() or 'deficiencia' in term.lower():
                         recommendation = "Modificación de estilo de vida y dieta saludable"
+                    elif 'dolor' in term.lower() or 'articular' in term.lower() or 'radiocarpiana' in term.lower() or 'traumatología' in term.lower():
+                        recommendation = "Evaluación traumatológica y fisioterapia"
                     else:
                         recommendation = "Seguimiento médico especializado"
                     
@@ -1194,6 +1206,8 @@ def extract_fallback_pairs_from_text(text, source_name):
                             recommendation = "Evaluación por medicina interna"
                         elif 'hdl' in term.lower() or 'deficiencia' in term.lower():
                             recommendation = "Modificación de estilo de vida y dieta saludable"
+                        elif 'dolor' in term.lower() or 'articular' in term.lower() or 'radiocarpiana' in term.lower() or 'traumatología' in term.lower():
+                            recommendation = "Evaluación traumatológica y fisioterapia"
                         else:
                             recommendation = "Seguimiento médico especializado"
                         
