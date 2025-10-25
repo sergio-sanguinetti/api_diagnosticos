@@ -1828,6 +1828,9 @@ class PDF(FPDF):
                    "Los diagnósticos similares se agrupan en la misma fila para facilitar la comparación."
         self.multi_cell(0, 4, note_text)
         self.ln(5)
+        
+        # Calcular métricas consistentes desde los pares
+        return calculate_metrics_from_pairs(medico_pairs, deepseek_pairs, gemini_pairs)
 
     def _print_cell_with_wrap(self, w, h, txt, border, ln, align):
         """Imprime una celda con ajuste automático de texto usando multi_cell para saltos de línea."""
@@ -1899,7 +1902,68 @@ class PDF(FPDF):
         else:
             self.set_xy(x + w, y)
 
-def generate_pdf_in_memory(token, medico, deepseek, gemini, summary, comparison,metrics):
+def calculate_metrics_from_pairs(medico_pairs, deepseek_pairs, gemini_pairs):
+    """Calcula métricas directamente desde los pares extraídos para consistencia."""
+    try:
+        print("🔍 Calculando métricas desde pares extraídos...")
+        
+        # Convertir pares a texto para cálculo de métricas
+        medico_text = " ".join([f"{diag} {rec}" for diag, rec in medico_pairs])
+        deepseek_text = " ".join([f"{diag} {rec}" for diag, rec in deepseek_pairs])
+        gemini_text = " ".join([f"{diag} {rec}" for diag, rec in gemini_pairs])
+        
+        print(f"📊 Pares del médico: {len(medico_pairs)}")
+        print(f"📊 Pares de DeepSeek: {len(deepseek_pairs)}")
+        print(f"📊 Pares de Gemini: {len(gemini_pairs)}")
+        
+        # Calcular métricas
+        metrics = {}
+        
+        # Similitud semántica
+        try:
+            metrics['deepseek_similarity'] = calculate_semantic_similarity(medico_text, deepseek_text)
+            metrics['gemini_similarity'] = calculate_semantic_similarity(medico_text, gemini_text)
+        except Exception as e:
+            print(f"⚠️ Error calculando similitud semántica: {e}")
+            metrics['deepseek_similarity'] = 0.0
+            metrics['gemini_similarity'] = 0.0
+        
+        # Kappa Cohen
+        try:
+            metrics['deepseek_kappa'] = calculate_kappa_cohen(medico_text, deepseek_text)
+            metrics['gemini_kappa'] = calculate_kappa_cohen(medico_text, gemini_text)
+        except Exception as e:
+            print(f"⚠️ Error calculando Kappa Cohen: {e}")
+            metrics['deepseek_kappa'] = 0.0
+            metrics['gemini_kappa'] = 0.0
+        
+        # Jaccard
+        try:
+            metrics['deepseek_jaccard'] = calculate_jaccard_similarity(medico_text, deepseek_text)
+            metrics['gemini_jaccard'] = calculate_jaccard_similarity(medico_text, gemini_text)
+        except Exception as e:
+            print(f"⚠️ Error calculando Jaccard: {e}")
+            metrics['deepseek_jaccard'] = 0.0
+            metrics['gemini_jaccard'] = 0.0
+        
+        print(f"📊 Métricas calculadas:")
+        print(f"  DeepSeek - Similitud: {metrics['deepseek_similarity']:.4f}, Kappa: {metrics['deepseek_kappa']:.4f}, Jaccard: {metrics['deepseek_jaccard']:.4f}")
+        print(f"  Gemini - Similitud: {metrics['gemini_similarity']:.4f}, Kappa: {metrics['gemini_kappa']:.4f}, Jaccard: {metrics['gemini_jaccard']:.4f}")
+        
+        return metrics
+        
+    except Exception as e:
+        print(f"❌ Error calculando métricas desde pares: {e}")
+        return {
+            'deepseek_similarity': 0.0,
+            'gemini_similarity': 0.0,
+            'deepseek_kappa': 0.0,
+            'gemini_kappa': 0.0,
+            'deepseek_jaccard': 0.0,
+            'gemini_jaccard': 0.0
+        }
+
+def generate_pdf_in_memory(token, medico, deepseek, gemini, summary, comparison, metrics=None):
     """Genera un PDF simplificado enfocado en análisis de IA y métricas."""
 
     pdf = PDF('P', 'mm', 'A4')
@@ -1964,8 +2028,15 @@ def generate_pdf_in_memory(token, medico, deepseek, gemini, summary, comparison,
     deepseek_pairs = improve_diagnosis_concordance(medico_pairs, deepseek_pairs, "DeepSeek")
     gemini_pairs = improve_diagnosis_concordance(medico_pairs, gemini_pairs, "Gemini")
     
-    # Crear la tabla comparativa unificada
-    pdf.print_diagnosis_recommendation_comparison_table(medico_pairs, deepseek_pairs, gemini_pairs)
+    # Crear la tabla comparativa unificada y obtener métricas consistentes
+    consistent_metrics = pdf.print_diagnosis_recommendation_comparison_table(medico_pairs, deepseek_pairs, gemini_pairs)
+    
+    # Usar métricas consistentes si están disponibles, sino usar las originales
+    if consistent_metrics:
+        print("✅ Usando métricas consistentes calculadas desde los pares")
+        metrics = consistent_metrics
+    else:
+        print("⚠️ Usando métricas originales (fallback)")
 
     # --- PÁGINA 4: MÉTRICAS DE SIMILITUD Y CONCORDANCIA ---
     pdf.add_page()
