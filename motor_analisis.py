@@ -225,7 +225,7 @@ def analyze_with_gemini(report, api_key):
     prompt = get_standard_prompt(report)
     try:
         genai.configure(api_key=api_key)
-        model = genai.GenerativeModel('gemini-1.5-flash')
+        model = genai.GenerativeModel('gemini-flash-latest')
         response = model.generate_content(prompt)
         return response.text
     except Exception as e:
@@ -265,7 +265,7 @@ def generate_executive_summary(deepseek_analysis, gemini_analysis, api_key):
     prompt = get_executive_summary_prompt(deepseek_analysis, gemini_analysis)
     try:
         genai.configure(api_key=api_key)
-        model = genai.GenerativeModel('gemini-1.5-flash')
+        model = genai.GenerativeModel('gemini-flash-latest')
         response = model.generate_content(prompt)
         return response.text
     except Exception as e:
@@ -296,7 +296,7 @@ def compare_ai_analyses(deepseek_analysis, gemini_analysis, api_key):
     """
     try:
         genai.configure(api_key=api_key)
-        model = genai.GenerativeModel('gemini-1.5-flash')
+        model = genai.GenerativeModel('gemini-flash-latest')
         response = model.generate_content(prompt)
         return response.text
     except Exception as e:
@@ -533,7 +533,7 @@ def extract_diagnoses_with_gemini(text, source_name, api_key):
     """Extrae diagnósticos específicos usando Gemini API con un prompt especializado."""
     try:
         genai.configure(api_key=api_key)
-        model = genai.GenerativeModel('gemini-1.5-flash')
+        model = genai.GenerativeModel('gemini-flash-latest')
         
         prompt = f"""
         **TAREA ESPECÍFICA**: Extrae ÚNICAMENTE los diagnósticos médicos específicos mencionados en el siguiente texto.
@@ -595,7 +595,7 @@ def extract_diagnosis_recommendation_pairs_with_gemini(text, source_name, api_ke
         print(f"📝 Texto a analizar (primeros 200 caracteres): {text[:200]}...")
         
         genai.configure(api_key=api_key)
-        model = genai.GenerativeModel('gemini-1.5-flash')
+        model = genai.GenerativeModel('gemini-flash-latest')
         
         # Prompt mejorado que maneja diferentes formatos
         prompt = f"""
@@ -948,7 +948,7 @@ class PDF(FPDF):
         # Dibujar encabezados
         self.cell(col_width, base_row_height * 2, 'MÉDICO/SISTEMA', 1, 0, 'C', fill=True)
         self.cell(col_width, base_row_height * 2, 'DEEPSEEK deepseek-chat', 1, 0, 'C', fill=True)
-        self.cell(col_width, base_row_height * 2, 'GEMINI gemini-1.5-flash', 1, 0, 'C', fill=True)
+            self.cell(col_width, base_row_height * 2, 'GEMINI gemini-flash-latest', 1, 0, 'C', fill=True)
         self.ln(base_row_height * 2)
         
         # Configurar fuente para contenido
@@ -1335,7 +1335,7 @@ def generate_pdf_in_memory(token, medico, deepseek, gemini, summary, comparison,
     pdf.ln(10)
 
     # --- SECCIÓN GEMINI ---
-    pdf.section_title('Métricas de Gemini (gemini-1.5-flash)')
+    pdf.section_title('Métricas de Gemini (gemini-flash-latest)')
     
     # Obtener métricas de Gemini
     sim_gemini = metrics.get('gemini_similarity', 0.0)
@@ -1360,7 +1360,7 @@ def generate_pdf_in_memory(token, medico, deepseek, gemini, summary, comparison,
     
     # Crear tabla comparativa
     comparison_table_text = (
-        "| Métrica | DeepSeek (deepseek-chat) | Gemini (gemini-1.5-flash) |\n"
+        "| Métrica | DeepSeek (deepseek-chat) | Gemini (gemini-flash-latest) |\n"
         "|---------|--------------------------|----------------------------|\n"
         f"| **Similitud Semántica** | {sim_deepseek:.4f} ({sim_deepseek*100:.2f}%) | {sim_gemini:.4f} ({sim_gemini*100:.2f}%) |\n"
         f"| **Índice de Kappa Cohen** | {kappa_deepseek:.4f} ({kappa_deepseek*100:.2f}%) | {kappa_gemini:.4f} ({kappa_gemini*100:.2f}%) |\n"

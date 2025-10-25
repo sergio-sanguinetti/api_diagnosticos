@@ -55,7 +55,7 @@ def analyze_results_with_llm(report, api_key):
     """Envía el informe a la API de Google Gemini para su análisis."""
     try:
         genai.configure(api_key=api_key)
-        model = genai.GenerativeModel('gemini-1.5-flash')
+        model = genai.GenerativeModel('gemini-flash-latest')
     except Exception as e:
         return f"Error configurando la API de Google: {e}"
 
