@@ -648,6 +648,10 @@ def extract_diagnosis_recommendation_pairs_with_gemini(text, source_name, api_ke
                         pairs.append((diagnosis, recommendation))
                         print(f"✅ Par extraído de {source_name}: {diagnosis[:30]}... -> {recommendation[:30]}...")
         
+        # Aplicar filtros
+        pairs = filter_ophthalmology_diagnoses(pairs)
+        pairs = filter_administrative_diagnoses(pairs)
+        
         print(f"📊 Total de pares extraídos de {source_name}: {len(pairs)}")
         return pairs[:8]  # Limitar a 8 pares máximo
         
@@ -718,6 +722,10 @@ def extract_medico_pairs_from_structured_text(medico_text):
                             recommendation = "Seguimiento médico especializado recomendado"
                             pairs.append((diagnosis, recommendation))
                             print(f"✅ Par del reporte completo: {diagnosis[:30]}... -> {recommendation}")
+        
+        # Aplicar filtros
+        pairs = filter_ophthalmology_diagnoses(pairs)
+        pairs = filter_administrative_diagnoses(pairs)
         
         print(f"📊 Total de pares válidos extraídos: {len(pairs)}")
         return pairs[:8]  # Limitar a 8 pares máximo
@@ -815,12 +823,66 @@ def extract_fallback_pairs_from_text(text, source_name):
                         pairs.append((term.capitalize(), recommendation))
                         print(f"✅ Par respaldo 3: {term.capitalize()} -> {recommendation}")
         
+        # Aplicar filtros
+        pairs = filter_ophthalmology_diagnoses(pairs)
+        pairs = filter_administrative_diagnoses(pairs)
+        
         print(f"📊 Total de pares de respaldo para {source_name}: {len(pairs)}")
         return pairs[:5]  # Limitar a 5 pares para respaldo
         
     except Exception as e:
         print(f"❌ Error en extracción de respaldo para {source_name}: {e}")
         return []
+
+def filter_ophthalmology_diagnoses(pairs):
+    """Filtra diagnósticos relacionados con oftalmología."""
+    ophthalmology_keywords = [
+        'oftalmología', 'oftalmologico', 'oftalmologica',
+        'ametropia', 'ametropía', 'corregida', 'corregido',
+        'lentes', 'gafas', 'anteojos', 'visión', 'visual',
+        'ocular', 'ojo', 'ojos', 'miopía', 'hipermetropía',
+        'astigmatismo', 'demanda visual', 'salud ocular'
+    ]
+    
+    filtered_pairs = []
+    for diagnosis, recommendation in pairs:
+        diagnosis_lower = diagnosis.lower()
+        recommendation_lower = recommendation.lower()
+        
+        # Verificar si contiene palabras clave oftalmológicas
+        is_ophthalmology = any(keyword in diagnosis_lower or keyword in recommendation_lower 
+                              for keyword in ophthalmology_keywords)
+        
+        if not is_ophthalmology:
+            filtered_pairs.append((diagnosis, recommendation))
+        else:
+            print(f"🚫 Filtrado diagnóstico oftalmológico: {diagnosis[:30]}...")
+    
+    return filtered_pairs
+
+def filter_administrative_diagnoses(pairs):
+    """Filtra diagnósticos administrativos como 'Ausencia de resultados'."""
+    administrative_keywords = [
+        'ausencia de resultados', 'perfil', 'análisis faltantes',
+        'programar urgentemente', 'exámenes pendientes',
+        'resultados pendientes', 'laboratorio pendiente'
+    ]
+    
+    filtered_pairs = []
+    for diagnosis, recommendation in pairs:
+        diagnosis_lower = diagnosis.lower()
+        recommendation_lower = recommendation.lower()
+        
+        # Verificar si contiene palabras clave administrativas
+        is_administrative = any(keyword in diagnosis_lower or keyword in recommendation_lower 
+                               for keyword in administrative_keywords)
+        
+        if not is_administrative:
+            filtered_pairs.append((diagnosis, recommendation))
+        else:
+            print(f"🚫 Filtrado diagnóstico administrativo: {diagnosis[:30]}...")
+    
+    return filtered_pairs
 
 def extract_ai_pairs_from_medico_data(medico_pairs, source_name):
     """Extrae pares para las IAs basándose en los datos del sistema médico cuando las APIs fallan."""
@@ -869,6 +931,10 @@ def extract_ai_pairs_from_medico_data(medico_pairs, source_name):
             
             ai_pairs.append((medico_diag, ai_rec))
             print(f"✅ Par generado para {source_name}: {medico_diag[:30]}... -> {ai_rec[:30]}...")
+        
+        # Aplicar filtros
+        ai_pairs = filter_ophthalmology_diagnoses(ai_pairs)
+        ai_pairs = filter_administrative_diagnoses(ai_pairs)
         
         print(f"📊 Total de pares generados para {source_name}: {len(ai_pairs)}")
         return ai_pairs[:6]  # Limitar a 6 pares máximo
