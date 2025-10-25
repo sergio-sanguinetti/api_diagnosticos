@@ -660,45 +660,83 @@ def extract_diagnoses_only(text):
     try:
         diagnoses = []
         
-        # Buscar pares diagnóstico-recomendación y extraer solo diagnósticos
+        # Método 1: Buscar pares diagnóstico-recomendación estructurados
         medico_pairs = extract_medico_pairs_from_structured_text(text)
         for diagnosis, recommendation in medico_pairs:
             diagnoses.append(diagnosis)
         
-        # Si no se encontraron pares estructurados, buscar diagnósticos directamente
+        # Método 2: Si no se encontraron pares estructurados, buscar diagnósticos directamente
         if not diagnoses:
-            # Buscar patrones de diagnósticos en el texto
+            # Buscar patrones específicos de diagnósticos médicos
             diagnosis_patterns = [
-                r'- Diagnóstico:\s*([^\n]+)',
-                r'Diagnóstico:\s*([^\n]+)',
-                r'([A-ZÁÉÍÓÚÑ][A-ZÁÉÍÓÚÑ\s]+(?:EMIA|OSIS|ITIS|ALGIA|PENIA|CEMIA|LIPIDEMIA|POLICITEMIA|BRADICARDIA|SOBREPESO|DEFICIENCIA))',
-                r'([A-ZÁÉÍÓÚÑ][A-ZÁÉÍÓÚÑ\s]+(?:ANEMIA|DIABETES|HIPERTENSIÓN|DISLIPIDEMIA|GASTRITIS))'
+                # Patrón 1: "• DIAGNÓSTICO" o "• Diagnóstico"
+                r'•\s*([A-ZÁÉÍÓÚÑ][A-ZÁÉÍÓÚÑ\s]+(?:EMIA|OSIS|ITIS|ALGIA|PENIA|CEMIA|LIPIDEMIA|POLICITEMIA|BRADICARDIA|SOBREPESO|DEFICIENCIA|DIABETES|HIPERTENSIÓN|DISLIPIDEMIA|GASTRITIS|DOLOR|ARTICULACIÓN|RADIOCARPIANA))',
+                
+                # Patrón 2: "Diagnóstico: X"
+                r'[Dd]iagnóstico[:\s]+([A-ZÁÉÍÓÚÑ][A-ZÁÉÍÓÚÑ\s]+(?:EMIA|OSIS|ITIS|ALGIA|PENIA|CEMIA|LIPIDEMIA|POLICITEMIA|BRADICARDIA|SOBREPESO|DEFICIENCIA|DIABETES|HIPERTENSIÓN|DISLIPIDEMIA|GASTRITIS|DOLOR|ARTICULACIÓN|RADIOCARPIANA))',
+                
+                # Patrón 3: Diagnósticos en mayúsculas seguidos de recomendaciones
+                r'([A-ZÁÉÍÓÚÑ][A-ZÁÉÍÓÚÑ\s]+(?:EMIA|OSIS|ITIS|ALGIA|PENIA|CEMIA|LIPIDEMIA|POLICITEMIA|BRADICARDIA|SOBREPESO|DEFICIENCIA|DIABETES|HIPERTENSIÓN|DISLIPIDEMIA|GASTRITIS|DOLOR|ARTICULACIÓN|RADIOCARPIANA))\s*→',
+                
+                # Patrón 4: Diagnósticos comunes específicos
+                r'(ANEMIA\s+LEVE|ANEMIA\s+MODERADA|ANEMIA\s+SEVERA|DOLOR\s+EN\s+ARTICULACIÓN\s+RADIOCARPIANA|HIPERTRIGLICERIDEMIA|HIPERLIPIDEMIA|POLICITEMIA|SOBREPESO|OBESIDAD|BRADICARDIA|DEFICIENCIA\s+HDL|DIABETES|HIPERTENSIÓN|GASTRITIS)',
+                
+                # Patrón 5: Diagnósticos en minúsculas/mixtos
+                r'(anemia\s+leve|anemia\s+moderada|anemia\s+severa|dolor\s+en\s+articulación\s+radiocarpiana|hipertrigliceridemia|hiperlipidemia|policitemia|sobrepeso|obesidad|bradicardia|deficiencia\s+hdl|diabetes|hipertensión|gastritis)',
             ]
             
             for pattern in diagnosis_patterns:
                 matches = re.findall(pattern, text, re.IGNORECASE)
                 for match in matches:
                     diagnosis = match.strip()
+                    # Limpiar el diagnóstico
+                    diagnosis = re.sub(r'[^\w\s]', '', diagnosis)
+                    diagnosis = re.sub(r'\s+', ' ', diagnosis).strip()
+                    
                     if len(diagnosis) > 3 and len(diagnosis) < 100:
                         diagnoses.append(diagnosis)
         
-        # Filtrar diagnósticos oftalmológicos y administrativos
+        # Método 3: Búsqueda por términos médicos específicos si aún no hay diagnósticos
+        if not diagnoses:
+            medical_terms = [
+                'anemia leve', 'anemia moderada', 'anemia severa',
+                'dolor en articulación radiocarpiana', 'dolor articular',
+                'hipertrigliceridemia', 'trigliceridemia',
+                'hiperlipidemia', 'colesterol alto',
+                'policitemia', 'hematocrito elevado',
+                'sobrepeso', 'obesidad', 'obesidad mórbida',
+                'bradicardia', 'frecuencia cardíaca baja',
+                'deficiencia hdl', 'hdl bajo',
+                'diabetes', 'diabetes tipo 2', 'glucosa elevada',
+                'hipertensión', 'presión arterial alta',
+                'gastritis', 'úlcera gástrica'
+            ]
+            
+            text_lower = text.lower()
+            for term in medical_terms:
+                if term in text_lower:
+                    # Buscar la versión exacta en el texto original
+                    term_pattern = re.escape(term)
+                    matches = re.findall(term_pattern, text, re.IGNORECASE)
+                    for match in matches:
+                        diagnosis = match.strip()
+                        if len(diagnosis) > 3:
+                            diagnoses.append(diagnosis)
+        
+        # Filtrar diagnósticos oftalmológicos y administrativos (versión menos restrictiva)
         filtered_diagnoses = []
         for diagnosis in diagnoses:
             diagnosis_lower = diagnosis.lower()
             
-            # Filtrar oftalmológicos
+            # Solo filtrar diagnósticos claramente oftalmológicos o administrativos
             ophthalmology_keywords = [
-                'oftalmología', 'oftalmologico', 'oftalmologica',
                 'ametropia', 'ametropía', 'corregida', 'corregido',
-                'lentes', 'gafas', 'anteojos', 'visión', 'visual',
-                'ocular', 'ojo', 'ojos', 'miopía', 'hipermetropía',
-                'astigmatismo', 'demanda visual', 'salud ocular'
+                'lentes', 'gafas', 'anteojos', 'miopía', 'hipermetropía',
+                'astigmatismo', 'demanda visual'
             ]
             
-            # Filtrar administrativos
             administrative_keywords = [
-                'ausencia de resultados', 'perfil', 'análisis faltantes',
+                'ausencia de resultados', 'análisis faltantes',
                 'programar urgentemente', 'exámenes pendientes',
                 'resultados pendientes', 'laboratorio pendiente'
             ]
@@ -706,24 +744,33 @@ def extract_diagnoses_only(text):
             is_ophthalmology = any(keyword in diagnosis_lower for keyword in ophthalmology_keywords)
             is_administrative = any(keyword in diagnosis_lower for keyword in administrative_keywords)
             
-            if not is_ophthalmology and not is_administrative:
+            # No filtrar si contiene términos médicos importantes
+            has_medical_importance = any(term in diagnosis_lower for term in [
+                'diabetes', 'hipertensión', 'anemia', 'colesterol', 'triglicéridos',
+                'sobrepeso', 'obesidad', 'gastritis', 'bradicardia', 'policitemia',
+                'dolor', 'articular', 'traumatología'
+            ])
+            
+            if not (is_ophthalmology or is_administrative) or has_medical_importance:
                 filtered_diagnoses.append(diagnosis)
         
-        # Deduplicar diagnósticos similares
+        # Eliminar duplicados manteniendo el orden
+        seen = set()
         unique_diagnoses = []
-        seen_normalized = set()
-        
         for diagnosis in filtered_diagnoses:
-            normalized = normalize_diagnosis_for_comparison(diagnosis)
-            if normalized not in seen_normalized:
-                seen_normalized.add(normalized)
+            diagnosis_lower = diagnosis.lower().strip()
+            if diagnosis_lower not in seen:
+                seen.add(diagnosis_lower)
                 unique_diagnoses.append(diagnosis)
         
         print(f"📊 Diagnósticos extraídos (solo diagnósticos): {len(unique_diagnoses)}")
+        for i, diag in enumerate(unique_diagnoses):
+            print(f"  {i+1}. {diag[:50]}...")
+        
         return unique_diagnoses
         
     except Exception as e:
-        print(f"❌ Error extrayendo solo diagnósticos: {e}")
+        print(f"❌ Error extrayendo diagnósticos: {e}")
         return []
 
 def extract_medical_terms(text):
