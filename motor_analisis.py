@@ -837,6 +837,59 @@ def extract_fallback_pairs_from_text(text, source_name):
         print(f"❌ Error en extracción de respaldo para {source_name}: {e}")
         return []
 
+def improve_diagnosis_concordance(medico_pairs, ai_pairs, ai_name):
+    """Mejora la concordancia entre diagnósticos del médico y la IA."""
+    if not medico_pairs or not ai_pairs:
+        return ai_pairs
+    
+    # Crear un mapa de diagnósticos del médico para referencia
+    medico_diagnoses = set()
+    for diag, rec in medico_pairs:
+        # Normalizar diagnóstico del médico
+        normalized = normalize_diagnosis_for_comparison(diag)
+        medico_diagnoses.add(normalized)
+    
+    improved_pairs = []
+    
+    for ai_diag, ai_rec in ai_pairs:
+        ai_normalized = normalize_diagnosis_for_comparison(ai_diag)
+        
+        # Verificar si el diagnóstico de la IA tiene concordancia con el médico
+        has_concordance = any(
+            calculate_similarity(ai_normalized, medico_diag) > 0.6 
+            for medico_diag in medico_diagnoses
+        )
+        
+        if has_concordance:
+            improved_pairs.append((ai_diag, ai_rec))
+            print(f"✅ {ai_name}: Diagnóstico concordante - {ai_diag[:30]}...")
+        else:
+            print(f"⚠️ {ai_name}: Diagnóstico no concordante filtrado - {ai_diag[:30]}...")
+    
+    return improved_pairs
+
+def normalize_diagnosis_for_comparison(diagnosis):
+    """Normaliza un diagnóstico para comparación de concordancia."""
+    normalized = diagnosis.lower().strip()
+    # Remover caracteres especiales
+    normalized = re.sub(r'[^\w\s]', '', normalized)
+    # Remover espacios extra
+    normalized = re.sub(r'\s+', ' ', normalized).strip()
+    return normalized
+
+def calculate_similarity(diag1, diag2):
+    """Calcula similitud simple entre dos diagnósticos."""
+    words1 = set(diag1.split())
+    words2 = set(diag2.split())
+    
+    if not words1 or not words2:
+        return 0.0
+    
+    intersection = words1.intersection(words2)
+    union = words1.union(words2)
+    
+    return len(intersection) / len(union) if union else 0.0
+
 def deduplicate_similar_diagnoses(pairs):
     """Elimina diagnósticos similares o duplicados de una lista de pares."""
     if not pairs:
@@ -856,7 +909,8 @@ def deduplicate_similar_diagnoses(pairs):
         
         # Remover palabras comunes que no aportan significado médico
         common_words = ['leve', 'moderada', 'severa', 'crónica', 'aguda', 'persistente', 
-                       'bilateral', 'unilateral', 'izquierda', 'derecha', 'superior', 'inferior']
+                       'bilateral', 'unilateral', 'izquierda', 'derecha', 'superior', 'inferior',
+                       'derecho', 'izquierdo', 'superior', 'inferior', 'anterior', 'posterior']
         
         words = normalized.split()
         meaningful_words = [word for word in words if word not in common_words]
@@ -1396,6 +1450,11 @@ def generate_pdf_in_memory(token, medico, deepseek, gemini, summary, comparison,
     if gemini_pairs:
         for i, (diag, rec) in enumerate(gemini_pairs[:3]):  # Mostrar solo los primeros 3
             print(f"  Gemini {i+1}: {diag[:30]}... -> {rec[:30]}...")
+    
+    # Aplicar mejora de concordancia
+    print("🔧 Aplicando mejora de concordancia...")
+    deepseek_pairs = improve_diagnosis_concordance(medico_pairs, deepseek_pairs, "DeepSeek")
+    gemini_pairs = improve_diagnosis_concordance(medico_pairs, gemini_pairs, "Gemini")
     
     # Crear la tabla comparativa unificada
     pdf.print_diagnosis_recommendation_comparison_table(medico_pairs, deepseek_pairs, gemini_pairs)
