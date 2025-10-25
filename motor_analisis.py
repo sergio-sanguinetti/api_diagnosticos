@@ -648,9 +648,10 @@ def extract_diagnosis_recommendation_pairs_with_gemini(text, source_name, api_ke
                         pairs.append((diagnosis, recommendation))
                         print(f"✅ Par extraído de {source_name}: {diagnosis[:30]}... -> {recommendation[:30]}...")
         
-        # Aplicar filtros
+        # Aplicar filtros y deduplicación
         pairs = filter_ophthalmology_diagnoses(pairs)
         pairs = filter_administrative_diagnoses(pairs)
+        pairs = deduplicate_similar_diagnoses(pairs)
         
         print(f"📊 Total de pares extraídos de {source_name}: {len(pairs)}")
         return pairs[:8]  # Limitar a 8 pares máximo
@@ -723,9 +724,10 @@ def extract_medico_pairs_from_structured_text(medico_text):
                             pairs.append((diagnosis, recommendation))
                             print(f"✅ Par del reporte completo: {diagnosis[:30]}... -> {recommendation}")
         
-        # Aplicar filtros
+        # Aplicar filtros y deduplicación
         pairs = filter_ophthalmology_diagnoses(pairs)
         pairs = filter_administrative_diagnoses(pairs)
+        pairs = deduplicate_similar_diagnoses(pairs)
         
         print(f"📊 Total de pares válidos extraídos: {len(pairs)}")
         return pairs[:8]  # Limitar a 8 pares máximo
@@ -823,9 +825,10 @@ def extract_fallback_pairs_from_text(text, source_name):
                         pairs.append((term.capitalize(), recommendation))
                         print(f"✅ Par respaldo 3: {term.capitalize()} -> {recommendation}")
         
-        # Aplicar filtros
+        # Aplicar filtros y deduplicación
         pairs = filter_ophthalmology_diagnoses(pairs)
         pairs = filter_administrative_diagnoses(pairs)
+        pairs = deduplicate_similar_diagnoses(pairs)
         
         print(f"📊 Total de pares de respaldo para {source_name}: {len(pairs)}")
         return pairs[:5]  # Limitar a 5 pares para respaldo
@@ -833,6 +836,63 @@ def extract_fallback_pairs_from_text(text, source_name):
     except Exception as e:
         print(f"❌ Error en extracción de respaldo para {source_name}: {e}")
         return []
+
+def deduplicate_similar_diagnoses(pairs):
+    """Elimina diagnósticos similares o duplicados de una lista de pares."""
+    if not pairs:
+        return pairs
+    
+    # Normalizar diagnósticos para comparación
+    def normalize_diagnosis(diagnosis):
+        """Normaliza un diagnóstico para comparación."""
+        # Convertir a minúsculas
+        normalized = diagnosis.lower().strip()
+        
+        # Remover caracteres especiales y números
+        normalized = re.sub(r'[^\w\s]', '', normalized)
+        
+        # Remover espacios extra
+        normalized = re.sub(r'\s+', ' ', normalized).strip()
+        
+        # Remover palabras comunes que no aportan significado médico
+        common_words = ['leve', 'moderada', 'severa', 'crónica', 'aguda', 'persistente', 
+                       'bilateral', 'unilateral', 'izquierda', 'derecha', 'superior', 'inferior']
+        
+        words = normalized.split()
+        meaningful_words = [word for word in words if word not in common_words]
+        
+        return ' '.join(meaningful_words)
+    
+    # Agrupar diagnósticos similares
+    grouped_diagnoses = {}
+    for diagnosis, recommendation in pairs:
+        normalized = normalize_diagnosis(diagnosis)
+        
+        if normalized not in grouped_diagnoses:
+            grouped_diagnoses[normalized] = []
+        
+        grouped_diagnoses[normalized].append((diagnosis, recommendation))
+    
+    # Seleccionar el mejor par de cada grupo
+    deduplicated_pairs = []
+    for normalized, group in grouped_diagnoses.items():
+        if len(group) == 1:
+            # Solo un diagnóstico en el grupo
+            deduplicated_pairs.append(group[0])
+        else:
+            # Múltiples diagnósticos similares - seleccionar el más completo
+            best_pair = max(group, key=lambda x: len(x[0]))
+            deduplicated_pairs.append(best_pair)
+            
+            # Log de diagnósticos duplicados encontrados
+            if len(group) > 1:
+                print(f"🔄 Deduplicando diagnósticos similares:")
+                for i, (diag, rec) in enumerate(group):
+                    status = "✅ SELECCIONADO" if (diag, rec) == best_pair else "❌ DUPLICADO"
+                    print(f"  {i+1}. {diag[:40]}... [{status}]")
+    
+    print(f"📊 Deduplicación: {len(pairs)} → {len(deduplicated_pairs)} pares")
+    return deduplicated_pairs
 
 def filter_ophthalmology_diagnoses(pairs):
     """Filtra diagnósticos relacionados con oftalmología."""
@@ -932,9 +992,10 @@ def extract_ai_pairs_from_medico_data(medico_pairs, source_name):
             ai_pairs.append((medico_diag, ai_rec))
             print(f"✅ Par generado para {source_name}: {medico_diag[:30]}... -> {ai_rec[:30]}...")
         
-        # Aplicar filtros
+        # Aplicar filtros y deduplicación
         ai_pairs = filter_ophthalmology_diagnoses(ai_pairs)
         ai_pairs = filter_administrative_diagnoses(ai_pairs)
+        ai_pairs = deduplicate_similar_diagnoses(ai_pairs)
         
         print(f"📊 Total de pares generados para {source_name}: {len(ai_pairs)}")
         return ai_pairs[:6]  # Limitar a 6 pares máximo
