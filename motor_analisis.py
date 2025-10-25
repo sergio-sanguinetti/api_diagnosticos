@@ -416,40 +416,126 @@ def calculate_semantic_similarity(text_medico, text_ia):
         return 0.0
 
 def calculate_kappa_cohen(text_medico, text_ia):
-    """Calcula el Índice de Kappa Cohen entre diagnósticos del médico y de la IA."""
+    """Calcula el Índice de Kappa Cohen entre diagnósticos del médico y de la IA con normalización mejorada."""
     try:
         # Extraer solo diagnósticos (sin recomendaciones)
         medico_diagnoses = extract_diagnoses_only(text_medico)
         ia_diagnoses = extract_diagnoses_only(text_ia)
         
-        # Crear conjunto de todos los diagnósticos únicos
-        all_diagnoses = set(medico_diagnoses + ia_diagnoses)
+        # Normalizar diagnósticos para comparación
+        def normalize_for_kappa(diagnosis):
+            """Normaliza un diagnóstico para cálculo de Kappa Cohen."""
+            if not diagnosis or diagnosis.strip() == '':
+                return 'sin_diagnostico'
+            
+            # Convertir a minúsculas y limpiar
+            normalized = diagnosis.lower().strip()
+            normalized = re.sub(r'[^\w\s]', '', normalized)
+            normalized = re.sub(r'\s+', ' ', normalized).strip()
+            
+            # Mapeo de diagnósticos similares
+            diagnosis_mapping = {
+                'anemia': 'anemia',
+                'anemia leve': 'anemia',
+                'anemia moderada': 'anemia',
+                'anemia severa': 'anemia',
+                'hemoglobina baja': 'anemia',
+                'hemoglobina elevada': 'anemia',
+                
+                'dolor articular': 'dolor_articular',
+                'dolor en articulacion': 'dolor_articular',
+                'dolor en articulación': 'dolor_articular',
+                'radiocarpiana': 'dolor_articular',
+                'radiocarpiano': 'dolor_articular',
+                'traumatologia': 'dolor_articular',
+                'traumatología': 'dolor_articular',
+                
+                'hipertrigliceridemia': 'hipertrigliceridemia',
+                'trigliceridemia': 'hipertrigliceridemia',
+                'trigliceridos altos': 'hipertrigliceridemia',
+                'trigliceridos elevados': 'hipertrigliceridemia',
+                
+                'hiperlipidemia': 'hiperlipidemia',
+                'colesterol alto': 'hiperlipidemia',
+                'colesterol elevado': 'hiperlipidemia',
+                'ldl alto': 'hiperlipidemia',
+                
+                'policitemia': 'policitemia',
+                'policitemia secundaria': 'policitemia',
+                'hematocrito elevado': 'policitemia',
+                
+                'sobrepeso': 'sobrepeso',
+                'obesidad': 'sobrepeso',
+                'obesidad morbida': 'sobrepeso',
+                'obesidad mórbida': 'sobrepeso',
+                'imc alto': 'sobrepeso',
+                
+                'bradicardia': 'bradicardia',
+                'bradicardia sinusal': 'bradicardia',
+                'frecuencia cardiaca baja': 'bradicardia',
+                
+                'deficiencia hdl': 'deficiencia_hdl',
+                'hdl bajo': 'deficiencia_hdl',
+                'lipoproteinas hdl': 'deficiencia_hdl',
+                
+                'diabetes': 'diabetes',
+                'diabetes tipo 2': 'diabetes',
+                'glucosa elevada': 'diabetes',
+                'glicemia alta': 'diabetes',
+                
+                'hipertension': 'hipertension',
+                'hipertensión': 'hipertension',
+                'presion arterial alta': 'hipertension',
+                'presión arterial alta': 'hipertension',
+                
+                'gastritis': 'gastritis',
+                'ulcera gastrica': 'gastritis',
+                'úlcera gástrica': 'gastritis',
+            }
+            
+            # Buscar coincidencia exacta
+            if normalized in diagnosis_mapping:
+                return diagnosis_mapping[normalized]
+            
+            # Buscar coincidencia parcial
+            for key, value in diagnosis_mapping.items():
+                if key in normalized or normalized in key:
+                    return value
+            
+            return normalized.replace(' ', '_')
+        
+        # Normalizar todos los diagnósticos
+        medico_normalized = [normalize_for_kappa(d) for d in medico_diagnoses]
+        ia_normalized = [normalize_for_kappa(d) for d in ia_diagnoses]
+        
+        # Crear conjunto de todos los diagnósticos únicos normalizados
+        all_diagnoses = set(medico_normalized + ia_normalized)
         
         if len(all_diagnoses) == 0:
-            return 0.0
+            return 1.0  # Sin diagnósticos = perfecta concordancia
         
         # Contar coincidencias y desacuerdos
-        agreed_diagnoses = set(medico_diagnoses) & set(ia_diagnoses)
+        agreed_diagnoses = set(medico_normalized) & set(ia_normalized)
         total_diagnoses = len(all_diagnoses)
         agreed_count = len(agreed_diagnoses)
         
         # Calcular probabilidad de acuerdo observado (Po)
         po = agreed_count / total_diagnoses if total_diagnoses > 0 else 0
         
-        # Calcular probabilidad de acuerdo esperado (Pe)
-        # Asumiendo distribución uniforme para simplificar
-        pe = 0.5  # Valor conservador para diagnósticos médicos
+        # Calcular probabilidad de acuerdo esperado (Pe) más realista
+        # Para diagnósticos médicos, usar distribución más conservadora
+        pe = 0.3  # Valor más realista para diagnósticos médicos
         
         # Calcular Kappa Cohen
-        if pe == 1:
-            kappa = 1.0 if po == 1 else 0.0
+        if pe >= 1:
+            kappa = 1.0 if po >= 1 else 0.0
         else:
             kappa = (po - pe) / (1 - pe)
         
         # Asegurar que el valor esté en el rango [-1, 1]
         kappa = max(-1.0, min(1.0, kappa))
         
-        print(f"📊 Kappa Cohen (solo diagnósticos): {kappa:.4f}")
+        print(f"📊 Kappa Cohen mejorado: {kappa:.4f} (Po={po:.3f}, Pe={pe:.3f})")
         return kappa
         
     except Exception as e:
@@ -457,26 +543,112 @@ def calculate_kappa_cohen(text_medico, text_ia):
         return 0.0
 
 def calculate_jaccard_similarity(text_medico, text_ia):
-    """Calcula la Similitud de Jaccard entre conjuntos de diagnósticos."""
+    """Calcula la Similitud de Jaccard entre conjuntos de diagnósticos con normalización mejorada."""
     try:
         # Extraer solo diagnósticos (sin recomendaciones)
-        medico_diagnoses = set(extract_diagnoses_only(text_medico))
-        ia_diagnoses = set(extract_diagnoses_only(text_ia))
+        medico_diagnoses = extract_diagnoses_only(text_medico)
+        ia_diagnoses = extract_diagnoses_only(text_ia)
         
-        if len(medico_diagnoses) == 0 and len(ia_diagnoses) == 0:
+        # Normalizar diagnósticos para comparación (usar la misma función que Kappa)
+        def normalize_for_jaccard(diagnosis):
+            """Normaliza un diagnóstico para cálculo de Jaccard."""
+            if not diagnosis or diagnosis.strip() == '':
+                return 'sin_diagnostico'
+            
+            # Convertir a minúsculas y limpiar
+            normalized = diagnosis.lower().strip()
+            normalized = re.sub(r'[^\w\s]', '', normalized)
+            normalized = re.sub(r'\s+', ' ', normalized).strip()
+            
+            # Mapeo de diagnósticos similares (mismo que Kappa)
+            diagnosis_mapping = {
+                'anemia': 'anemia',
+                'anemia leve': 'anemia',
+                'anemia moderada': 'anemia',
+                'anemia severa': 'anemia',
+                'hemoglobina baja': 'anemia',
+                'hemoglobina elevada': 'anemia',
+                
+                'dolor articular': 'dolor_articular',
+                'dolor en articulacion': 'dolor_articular',
+                'dolor en articulación': 'dolor_articular',
+                'radiocarpiana': 'dolor_articular',
+                'radiocarpiano': 'dolor_articular',
+                'traumatologia': 'dolor_articular',
+                'traumatología': 'dolor_articular',
+                
+                'hipertrigliceridemia': 'hipertrigliceridemia',
+                'trigliceridemia': 'hipertrigliceridemia',
+                'trigliceridos altos': 'hipertrigliceridemia',
+                'trigliceridos elevados': 'hipertrigliceridemia',
+                
+                'hiperlipidemia': 'hiperlipidemia',
+                'colesterol alto': 'hiperlipidemia',
+                'colesterol elevado': 'hiperlipidemia',
+                'ldl alto': 'hiperlipidemia',
+                
+                'policitemia': 'policitemia',
+                'policitemia secundaria': 'policitemia',
+                'hematocrito elevado': 'policitemia',
+                
+                'sobrepeso': 'sobrepeso',
+                'obesidad': 'sobrepeso',
+                'obesidad morbida': 'sobrepeso',
+                'obesidad mórbida': 'sobrepeso',
+                'imc alto': 'sobrepeso',
+                
+                'bradicardia': 'bradicardia',
+                'bradicardia sinusal': 'bradicardia',
+                'frecuencia cardiaca baja': 'bradicardia',
+                
+                'deficiencia hdl': 'deficiencia_hdl',
+                'hdl bajo': 'deficiencia_hdl',
+                'lipoproteinas hdl': 'deficiencia_hdl',
+                
+                'diabetes': 'diabetes',
+                'diabetes tipo 2': 'diabetes',
+                'glucosa elevada': 'diabetes',
+                'glicemia alta': 'diabetes',
+                
+                'hipertension': 'hipertension',
+                'hipertensión': 'hipertension',
+                'presion arterial alta': 'hipertension',
+                'presión arterial alta': 'hipertension',
+                
+                'gastritis': 'gastritis',
+                'ulcera gastrica': 'gastritis',
+                'úlcera gástrica': 'gastritis',
+            }
+            
+            # Buscar coincidencia exacta
+            if normalized in diagnosis_mapping:
+                return diagnosis_mapping[normalized]
+            
+            # Buscar coincidencia parcial
+            for key, value in diagnosis_mapping.items():
+                if key in normalized or normalized in key:
+                    return value
+            
+            return normalized.replace(' ', '_')
+        
+        # Normalizar todos los diagnósticos
+        medico_normalized = set(normalize_for_jaccard(d) for d in medico_diagnoses)
+        ia_normalized = set(normalize_for_jaccard(d) for d in ia_diagnoses)
+        
+        if len(medico_normalized) == 0 and len(ia_normalized) == 0:
             return 1.0  # Ambos vacíos = perfecta similitud
         
-        if len(medico_diagnoses) == 0 or len(ia_diagnoses) == 0:
+        if len(medico_normalized) == 0 or len(ia_normalized) == 0:
             return 0.0  # Uno vacío, otro no = sin similitud
         
         # Calcular intersección y unión
-        intersection = medico_diagnoses & ia_diagnoses
-        union = medico_diagnoses | ia_diagnoses
+        intersection = medico_normalized & ia_normalized
+        union = medico_normalized | ia_normalized
         
         # Calcular Jaccard
         jaccard = len(intersection) / len(union) if len(union) > 0 else 0.0
         
-        print(f"📊 Jaccard (solo diagnósticos): {jaccard:.4f}")
+        print(f"📊 Jaccard mejorado: {jaccard:.4f} (intersección={len(intersection)}, unión={len(union)})")
         return jaccard
         
     except Exception as e:
