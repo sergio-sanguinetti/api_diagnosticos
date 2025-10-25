@@ -324,29 +324,26 @@ def calculate_semantic_similarity(text_medico, text_ia):
         if len(text_ia) > 1500:
             text_ia = text_ia[:1500] + "..."
         
-        # Crear prompt para DeepSeek
+        # Crear prompt para DeepSeek enfocado en diagnósticos
         prompt = f"""
-        **TAREA**: Calcula la similitud semántica entre dos análisis médicos.
+        **TAREA**: Calcula la similitud semántica entre diagnósticos médicos.
         
-        **ANÁLISIS MÉDICO ORIGINAL**:
+        **DIAGNÓSTICOS DEL MÉDICO**:
         {medico_content}
         
-        **ANÁLISIS DE IA**:
+        **DIAGNÓSTICOS DE LA IA**:
         {text_ia}
         
         **INSTRUCCIONES**:
-        1. Compara ambos análisis en términos de:
-           - Diagnósticos mencionados
-           - Recomendaciones sugeridas
-           - Hallazgos clave identificados
-           - Coherencia médica general
+        1. Compara ÚNICAMENTE los diagnósticos mencionados en ambos textos
+        2. Ignora las recomendaciones, tratamientos o sugerencias
+        3. Evalúa qué tan similares son los diagnósticos en contenido médico
+        4. Considera diagnósticos equivalentes (ej: "anemia leve" ≈ "anemia")
         
-        2. Evalúa qué tan similares son en contenido y enfoque médico
-        
-        3. Devuelve ÚNICAMENTE un número decimal entre 0.0 y 1.0 donde:
-           - 0.0 = Completamente diferentes
-           - 0.5 = Moderadamente similares
-           - 1.0 = Completamente similares
+        5. Devuelve ÚNICAMENTE un número decimal entre 0.0 y 1.0 donde:
+           - 0.0 = Diagnósticos completamente diferentes
+           - 0.5 = Diagnósticos moderadamente similares
+           - 1.0 = Diagnósticos idénticos o equivalentes
         
         **FORMATO DE RESPUESTA**: Solo el número decimal, sin explicaciones adicionales.
         Ejemplo: 0.75
@@ -419,29 +416,29 @@ def calculate_semantic_similarity(text_medico, text_ia):
         return 0.0
 
 def calculate_kappa_cohen(text_medico, text_ia):
-    """Calcula el Índice de Kappa Cohen entre el análisis médico y el análisis de IA."""
+    """Calcula el Índice de Kappa Cohen entre diagnósticos del médico y de la IA."""
     try:
-        # Extraer términos médicos de ambos textos
-        medico_terms = extract_medical_terms(text_medico)
-        ia_terms = extract_medical_terms(text_ia)
+        # Extraer solo diagnósticos (sin recomendaciones)
+        medico_diagnoses = extract_diagnoses_only(text_medico)
+        ia_diagnoses = extract_diagnoses_only(text_ia)
         
-        # Crear conjunto de todos los términos únicos
-        all_terms = set(medico_terms + ia_terms)
+        # Crear conjunto de todos los diagnósticos únicos
+        all_diagnoses = set(medico_diagnoses + ia_diagnoses)
         
-        if len(all_terms) == 0:
+        if len(all_diagnoses) == 0:
             return 0.0
         
         # Contar coincidencias y desacuerdos
-        agreed_terms = set(medico_terms) & set(ia_terms)
-        total_terms = len(all_terms)
-        agreed_count = len(agreed_terms)
+        agreed_diagnoses = set(medico_diagnoses) & set(ia_diagnoses)
+        total_diagnoses = len(all_diagnoses)
+        agreed_count = len(agreed_diagnoses)
         
         # Calcular probabilidad de acuerdo observado (Po)
-        po = agreed_count / total_terms if total_terms > 0 else 0
+        po = agreed_count / total_diagnoses if total_diagnoses > 0 else 0
         
         # Calcular probabilidad de acuerdo esperado (Pe)
         # Asumiendo distribución uniforme para simplificar
-        pe = 0.5  # Valor conservador para términos médicos
+        pe = 0.5  # Valor conservador para diagnósticos médicos
         
         # Calcular Kappa Cohen
         if pe == 1:
@@ -452,6 +449,7 @@ def calculate_kappa_cohen(text_medico, text_ia):
         # Asegurar que el valor esté en el rango [-1, 1]
         kappa = max(-1.0, min(1.0, kappa))
         
+        print(f"📊 Kappa Cohen (solo diagnósticos): {kappa:.4f}")
         return kappa
         
     except Exception as e:
@@ -459,30 +457,102 @@ def calculate_kappa_cohen(text_medico, text_ia):
         return 0.0
 
 def calculate_jaccard_similarity(text_medico, text_ia):
-    """Calcula la Similitud de Jaccard entre conjuntos de términos médicos."""
+    """Calcula la Similitud de Jaccard entre conjuntos de diagnósticos."""
     try:
-        # Extraer términos médicos de ambos textos
-        medico_terms = set(extract_medical_terms(text_medico))
-        ia_terms = set(extract_medical_terms(text_ia))
+        # Extraer solo diagnósticos (sin recomendaciones)
+        medico_diagnoses = set(extract_diagnoses_only(text_medico))
+        ia_diagnoses = set(extract_diagnoses_only(text_ia))
         
-        if len(medico_terms) == 0 and len(ia_terms) == 0:
+        if len(medico_diagnoses) == 0 and len(ia_diagnoses) == 0:
             return 1.0  # Ambos vacíos = perfecta similitud
         
-        if len(medico_terms) == 0 or len(ia_terms) == 0:
+        if len(medico_diagnoses) == 0 or len(ia_diagnoses) == 0:
             return 0.0  # Uno vacío, otro no = sin similitud
         
         # Calcular intersección y unión
-        intersection = medico_terms & ia_terms
-        union = medico_terms | ia_terms
+        intersection = medico_diagnoses & ia_diagnoses
+        union = medico_diagnoses | ia_diagnoses
         
         # Calcular Jaccard
         jaccard = len(intersection) / len(union) if len(union) > 0 else 0.0
         
+        print(f"📊 Jaccard (solo diagnósticos): {jaccard:.4f}")
         return jaccard
         
     except Exception as e:
         print(f"❌ Error calculando Jaccard: {e}")
         return 0.0
+
+def extract_diagnoses_only(text):
+    """Extrae solo los diagnósticos de un texto, omitiendo las recomendaciones."""
+    try:
+        diagnoses = []
+        
+        # Buscar pares diagnóstico-recomendación y extraer solo diagnósticos
+        medico_pairs = extract_medico_pairs_from_structured_text(text)
+        for diagnosis, recommendation in medico_pairs:
+            diagnoses.append(diagnosis)
+        
+        # Si no se encontraron pares estructurados, buscar diagnósticos directamente
+        if not diagnoses:
+            # Buscar patrones de diagnósticos en el texto
+            diagnosis_patterns = [
+                r'- Diagnóstico:\s*([^\n]+)',
+                r'Diagnóstico:\s*([^\n]+)',
+                r'([A-ZÁÉÍÓÚÑ][A-ZÁÉÍÓÚÑ\s]+(?:EMIA|OSIS|ITIS|ALGIA|PENIA|CEMIA|LIPIDEMIA|POLICITEMIA|BRADICARDIA|SOBREPESO|DEFICIENCIA))',
+                r'([A-ZÁÉÍÓÚÑ][A-ZÁÉÍÓÚÑ\s]+(?:ANEMIA|DIABETES|HIPERTENSIÓN|DISLIPIDEMIA|GASTRITIS))'
+            ]
+            
+            for pattern in diagnosis_patterns:
+                matches = re.findall(pattern, text, re.IGNORECASE)
+                for match in matches:
+                    diagnosis = match.strip()
+                    if len(diagnosis) > 3 and len(diagnosis) < 100:
+                        diagnoses.append(diagnosis)
+        
+        # Filtrar diagnósticos oftalmológicos y administrativos
+        filtered_diagnoses = []
+        for diagnosis in diagnoses:
+            diagnosis_lower = diagnosis.lower()
+            
+            # Filtrar oftalmológicos
+            ophthalmology_keywords = [
+                'oftalmología', 'oftalmologico', 'oftalmologica',
+                'ametropia', 'ametropía', 'corregida', 'corregido',
+                'lentes', 'gafas', 'anteojos', 'visión', 'visual',
+                'ocular', 'ojo', 'ojos', 'miopía', 'hipermetropía',
+                'astigmatismo', 'demanda visual', 'salud ocular'
+            ]
+            
+            # Filtrar administrativos
+            administrative_keywords = [
+                'ausencia de resultados', 'perfil', 'análisis faltantes',
+                'programar urgentemente', 'exámenes pendientes',
+                'resultados pendientes', 'laboratorio pendiente'
+            ]
+            
+            is_ophthalmology = any(keyword in diagnosis_lower for keyword in ophthalmology_keywords)
+            is_administrative = any(keyword in diagnosis_lower for keyword in administrative_keywords)
+            
+            if not is_ophthalmology and not is_administrative:
+                filtered_diagnoses.append(diagnosis)
+        
+        # Deduplicar diagnósticos similares
+        unique_diagnoses = []
+        seen_normalized = set()
+        
+        for diagnosis in filtered_diagnoses:
+            normalized = normalize_diagnosis_for_comparison(diagnosis)
+            if normalized not in seen_normalized:
+                seen_normalized.add(normalized)
+                unique_diagnoses.append(diagnosis)
+        
+        print(f"📊 Diagnósticos extraídos (solo diagnósticos): {len(unique_diagnoses)}")
+        return unique_diagnoses
+        
+    except Exception as e:
+        print(f"❌ Error extrayendo solo diagnósticos: {e}")
+        return []
 
 def extract_medical_terms(text):
     """Extrae términos médicos relevantes de un texto."""
