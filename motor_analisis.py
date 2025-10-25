@@ -667,7 +667,7 @@ def extract_diagnosis_recommendation_pairs_with_gemini(text, source_name, api_ke
         genai.configure(api_key=api_key)
         model = genai.GenerativeModel('gemini-flash-latest')
         
-        # Prompt mejorado que maneja diferentes formatos
+        # Prompt mejorado que maneja diferentes formatos y es más específico
         prompt = f"""
         **TAREA ESPECÍFICA**: Extrae pares de diagnóstico-recomendación específicos mencionados en el siguiente texto.
         
@@ -680,7 +680,8 @@ def extract_diagnosis_recommendation_pairs_with_gemini(text, source_name, api_ke
         6. Máximo 8 pares
         7. Si no hay pares específicos, devuelve lista vacía
         8. Maneja diferentes formatos: "Diagnóstico: X\nRecomendación: Y" o "X | Y" o texto narrativo
-        9. Busca términos médicos como: hipertensión, diabetes, dislipidemia, gastritis, anemia, sobrepeso, obesidad, bradicardia, policitemia
+        9. Busca términos médicos como: hipertensión, diabetes, dislipidemia, gastritis, anemia, sobrepeso, obesidad, bradicardia, policitemia, trigliceridemia, hiperlipidemia, colesterol
+        10. IMPORTANTE: Si encuentras diagnósticos médicos válidos, DEBES extraerlos aunque no tengan recomendaciones explícitas. En ese caso, crea recomendaciones médicas apropiadas.
         
         **TEXTO A ANALIZAR**:
         {text}
@@ -718,6 +719,11 @@ def extract_diagnosis_recommendation_pairs_with_gemini(text, source_name, api_ke
                         pairs.append((diagnosis, recommendation))
                         print(f"✅ Par extraído de {source_name}: {diagnosis[:30]}... -> {recommendation[:30]}...")
         
+        # Si no se encontraron pares con el formato esperado, intentar extracción alternativa
+        if not pairs:
+            print(f"🔍 Intentando extracción alternativa para {source_name}...")
+            pairs = extract_pairs_alternative_method(text, source_name)
+        
         # Aplicar filtros y deduplicación
         pairs = filter_ophthalmology_diagnoses(pairs)
         pairs = filter_administrative_diagnoses(pairs)
@@ -732,6 +738,61 @@ def extract_diagnosis_recommendation_pairs_with_gemini(text, source_name, api_ke
             print(f"⚠️ Cuota de Gemini API excedida para {source_name}, usando función de respaldo")
         else:
             print(f"❌ Error extrayendo pares diagnóstico-recomendación con Gemini para {source_name}: {e}")
+        return []
+
+def extract_pairs_alternative_method(text, source_name):
+    """Método alternativo para extraer pares cuando el método principal falla."""
+    try:
+        print(f"🔧 Usando método alternativo para {source_name}")
+        pairs = []
+        
+        # Buscar diagnósticos médicos comunes en el texto
+        medical_diagnoses = [
+            'hipertensión', 'hipertensivo', 'presión arterial alta',
+            'diabetes', 'glucosa elevada', 'glicemia alta',
+            'dislipidemia', 'hiperlipidemia', 'colesterol alto', 'triglicéridos altos',
+            'anemia', 'hemoglobina baja', 'hemoglobina elevada',
+            'sobrepeso', 'obesidad', 'índice masa corporal alto',
+            'bradicardia', 'frecuencia cardíaca baja',
+            'gastritis', 'úlcera gástrica',
+            'policitemia', 'hematocrito elevado',
+            'deficiencia hdl', 'hdl bajo'
+        ]
+        
+        text_lower = text.lower()
+        
+        for diagnosis in medical_diagnoses:
+            if diagnosis in text_lower:
+                # Crear recomendación basada en el diagnóstico
+                if 'hipertensión' in diagnosis or 'presión' in diagnosis:
+                    recommendation = "Control de presión arterial y dieta baja en sodio"
+                elif 'diabetes' in diagnosis or 'glucosa' in diagnosis:
+                    recommendation = "Control de glucosa y seguimiento endocrinológico"
+                elif 'dislipidemia' in diagnosis or 'colesterol' in diagnosis or 'triglicéridos' in diagnosis:
+                    recommendation = "Dieta hipograsa y control de perfil lipídico"
+                elif 'anemia' in diagnosis or 'hemoglobina' in diagnosis:
+                    recommendation = "Evaluación hematológica y suplementación si es necesario"
+                elif 'sobrepeso' in diagnosis or 'obesidad' in diagnosis:
+                    recommendation = "Plan de alimentación y ejercicio"
+                elif 'bradicardia' in diagnosis:
+                    recommendation = "Evaluación cardiológica"
+                elif 'gastritis' in diagnosis:
+                    recommendation = "Dieta blanda y evaluación gastroenterológica"
+                elif 'policitemia' in diagnosis:
+                    recommendation = "Evaluación por medicina interna"
+                elif 'hdl' in diagnosis or 'deficiencia' in diagnosis:
+                    recommendation = "Modificación de estilo de vida y dieta saludable"
+                else:
+                    recommendation = "Seguimiento médico especializado"
+                
+                pairs.append((diagnosis.capitalize(), recommendation))
+                print(f"✅ Par alternativo extraído: {diagnosis.capitalize()} -> {recommendation}")
+        
+        # Limitar a 5 pares para el método alternativo
+        return pairs[:5]
+        
+    except Exception as e:
+        print(f"❌ Error en método alternativo para {source_name}: {e}")
         return []
 
 def extract_medico_pairs_from_structured_text(medico_text):
@@ -807,9 +868,9 @@ def extract_medico_pairs_from_structured_text(medico_text):
         return []
 
 def extract_fallback_pairs_from_text(text, source_name):
-    """Función de respaldo para extraer pares básicos cuando las APIs fallan."""
+    """Función de respaldo mejorada para extraer pares básicos cuando las APIs fallan."""
     try:
-        print(f"🔧 Usando función de respaldo para {source_name}")
+        print(f"🔧 Usando función de respaldo mejorada para {source_name}")
         pairs = []
         
         # Buscar patrones comunes de diagnóstico y recomendación
@@ -826,7 +887,19 @@ def extract_fallback_pairs_from_text(text, source_name):
                 print(f"✅ Par respaldo 1: {diagnosis[:30]}... -> {recommendation[:30]}...")
         
         # Patrón 2: Buscar términos médicos comunes seguidos de recomendaciones
-        medical_terms = ['hipertensión', 'diabetes', 'dislipidemia', 'gastritis', 'anemia', 'sobrepeso', 'obesidad', 'bradicardia', 'policitemia', 'trigliceridemia', 'colesterol', 'hipertrigliceridemia', 'hiperlipidemia']
+        medical_terms = [
+            'hipertensión', 'hipertensivo', 'presión arterial alta',
+            'diabetes', 'glucosa elevada', 'glicemia alta',
+            'dislipidemia', 'hiperlipidemia', 'colesterol alto', 'triglicéridos altos',
+            'anemia', 'hemoglobina baja', 'hemoglobina elevada',
+            'sobrepeso', 'obesidad', 'índice masa corporal alto',
+            'bradicardia', 'frecuencia cardíaca baja',
+            'gastritis', 'úlcera gástrica',
+            'policitemia', 'hematocrito elevado',
+            'deficiencia hdl', 'hdl bajo',
+            'trigliceridemia', 'hipertrigliceridemia'
+        ]
+        
         for term in medical_terms:
             if term.lower() in text.lower():
                 # Buscar recomendaciones cercanas
@@ -849,18 +922,24 @@ def extract_fallback_pairs_from_text(text, source_name):
             for term in medical_terms:
                 if term.lower() in text.lower():
                     # Crear recomendación genérica basada en el término
-                    if 'hipertensión' in term.lower():
+                    if 'hipertensión' in term.lower() or 'presión' in term.lower():
                         recommendation = "Control de presión arterial y dieta baja en sodio"
-                    elif 'diabetes' in term.lower():
+                    elif 'diabetes' in term.lower() or 'glucosa' in term.lower():
                         recommendation = "Control de glucosa y seguimiento endocrinológico"
                     elif 'dislipidemia' in term.lower() or 'trigliceridemia' in term.lower() or 'colesterol' in term.lower() or 'hiperlipidemia' in term.lower():
                         recommendation = "Dieta hipograsa y control de perfil lipídico"
+                    elif 'anemia' in term.lower() or 'hemoglobina' in term.lower():
+                        recommendation = "Evaluación hematológica y suplementación si es necesario"
                     elif 'sobrepeso' in term.lower() or 'obesidad' in term.lower():
                         recommendation = "Plan de alimentación y ejercicio"
                     elif 'bradicardia' in term.lower():
                         recommendation = "Evaluación cardiológica"
+                    elif 'gastritis' in term.lower():
+                        recommendation = "Dieta blanda y evaluación gastroenterológica"
                     elif 'policitemia' in term.lower():
                         recommendation = "Evaluación por medicina interna"
+                    elif 'hdl' in term.lower() or 'deficiencia' in term.lower():
+                        recommendation = "Modificación de estilo de vida y dieta saludable"
                     else:
                         recommendation = "Seguimiento médico especializado"
                     
@@ -877,18 +956,24 @@ def extract_fallback_pairs_from_text(text, source_name):
                 for term in medical_terms:
                     if term.lower() in section.lower():
                         # Crear recomendación genérica basada en el término
-                        if 'hipertensión' in term.lower():
+                        if 'hipertensión' in term.lower() or 'presión' in term.lower():
                             recommendation = "Control de presión arterial y dieta baja en sodio"
-                        elif 'diabetes' in term.lower():
+                        elif 'diabetes' in term.lower() or 'glucosa' in term.lower():
                             recommendation = "Control de glucosa y seguimiento endocrinológico"
                         elif 'dislipidemia' in term.lower() or 'trigliceridemia' in term.lower() or 'colesterol' in term.lower():
                             recommendation = "Dieta hipograsa y control de perfil lipídico"
+                        elif 'anemia' in term.lower() or 'hemoglobina' in term.lower():
+                            recommendation = "Evaluación hematológica y suplementación si es necesario"
                         elif 'sobrepeso' in term.lower() or 'obesidad' in term.lower():
                             recommendation = "Plan de alimentación y ejercicio"
                         elif 'bradicardia' in term.lower():
                             recommendation = "Evaluación cardiológica"
+                        elif 'gastritis' in term.lower():
+                            recommendation = "Dieta blanda y evaluación gastroenterológica"
                         elif 'policitemia' in term.lower():
                             recommendation = "Evaluación por medicina interna"
+                        elif 'hdl' in term.lower() or 'deficiencia' in term.lower():
+                            recommendation = "Modificación de estilo de vida y dieta saludable"
                         else:
                             recommendation = "Seguimiento médico especializado"
                         
@@ -1076,12 +1161,12 @@ def extract_ai_pairs_from_medico_data(medico_pairs, source_name):
         
         for medico_diag, medico_rec in medico_pairs:
             # Crear recomendaciones específicas para cada IA basadas en el diagnóstico médico
-            if 'hipertrigliceridemia' in medico_diag.lower():
+            if 'hipertrigliceridemia' in medico_diag.lower() or 'trigliceridemia' in medico_diag.lower():
                 if source_name == "DeepSeek":
                     ai_rec = "Se recomienda dieta hipograsa, hipocalorica, evaluacion por nutricion y control de perfil lipidico 06 meses"
                 else:  # Gemini
                     ai_rec = "Dieta hipograsa y control de perfil lipídico con seguimiento nutricional"
-            elif 'hiperlipidemia' in medico_diag.lower() or 'colesterol' in medico_diag.lower():
+            elif 'hiperlipidemia' in medico_diag.lower() or 'colesterol' in medico_diag.lower() or 'ldl' in medico_diag.lower():
                 if source_name == "DeepSeek":
                     ai_rec = "Se recomienda dieta rica en omega 3 y 6"
                 else:  # Gemini
@@ -1091,7 +1176,7 @@ def extract_ai_pairs_from_medico_data(medico_pairs, source_name):
                     ai_rec = "Se recomienda evaluacion por medicina interna y control de hemoglobina y hematocrito en 06 meses"
                 else:  # Gemini
                     ai_rec = "Evaluación por medicina interna y control hematológico"
-            elif 'sobrepeso' in medico_diag.lower():
+            elif 'sobrepeso' in medico_diag.lower() or 'obesidad' in medico_diag.lower():
                 if source_name == "DeepSeek":
                     ai_rec = "Se recomienda dieta hipograsa, hipocalorica."
                 else:  # Gemini
@@ -1106,6 +1191,26 @@ def extract_ai_pairs_from_medico_data(medico_pairs, source_name):
                     ai_rec = "Se recomienda dieta rica en omega 3 y 6"
                 else:  # Gemini
                     ai_rec = "Modificación de estilo de vida y dieta saludable"
+            elif 'anemia' in medico_diag.lower() or 'hemoglobina' in medico_diag.lower():
+                if source_name == "DeepSeek":
+                    ai_rec = "Se recomienda evaluacion hematologica y suplementacion si es necesario"
+                else:  # Gemini
+                    ai_rec = "Evaluación hematológica y suplementación si es necesario"
+            elif 'hipertensión' in medico_diag.lower() or 'presión' in medico_diag.lower():
+                if source_name == "DeepSeek":
+                    ai_rec = "Se recomienda control de presion arterial y dieta baja en sodio"
+                else:  # Gemini
+                    ai_rec = "Control de presión arterial y dieta baja en sodio"
+            elif 'diabetes' in medico_diag.lower() or 'glucosa' in medico_diag.lower():
+                if source_name == "DeepSeek":
+                    ai_rec = "Se recomienda control de glucosa y seguimiento endocrinologico"
+                else:  # Gemini
+                    ai_rec = "Control de glucosa y seguimiento endocrinológico"
+            elif 'gastritis' in medico_diag.lower():
+                if source_name == "DeepSeek":
+                    ai_rec = "Se recomienda dieta blanda y evaluacion gastroenterologica"
+                else:  # Gemini
+                    ai_rec = "Dieta blanda y evaluación gastroenterológica"
             else:
                 # Recomendación genérica
                 if source_name == "DeepSeek":
