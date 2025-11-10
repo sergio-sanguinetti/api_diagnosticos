@@ -25,9 +25,9 @@ import numpy as np
 DB_HOST = "193.203.175.193"
 DB_USER = "u212843563_good_salud"
 DB_PASS = "@9UbqRmS/oy"
-DB_NAME = "u212843563_good_salud"
+DB_NAME = "u212843563_good_salud" 
 DEEPSEEK_API_KEY = "sk-37167855ce4243e8afe1ccb669021e64"
-GOOGLE_API_KEY = "AIzaSyDqsYubkpT4Q_CofYluhK6lqmQHJui_U9A"
+GOOGLE_API_KEY = os.environ.get('GOOGLE_API_KEY', "AIzaSyAMmTkGmNI9vbcHyIABbW7jUC3T4Bg0DEY")  # Usa variable de entorno, con fallback
 HUGGINGFACE_API_KEY = os.environ.get('HUGGINGFACE_API_KEY') 
 
 # MODELO DE LENGUAJE EMBEDDINGS
@@ -1023,6 +1023,33 @@ def extract_pairs_alternative_method(text, source_name):
     except Exception as e:
         print(f"❌ Error en método alternativo para {source_name}: {e}")
         return []
+
+def extract_patient_info_from_text(medico_text):
+    """Extrae información del paciente del texto estructurado."""
+    patient_info = {
+        'centro_medico': 'N/A',
+        'ciudad': 'N/A',
+        'fecha_examen': 'N/A',
+        'puesto': 'N/A',
+        'tipo_examen': 'N/A',
+        'aptitud': 'N/A'
+    }
+    
+    try:
+        # Buscar la sección de información del paciente
+        info_match = re.search(r'SECCION_INFO_PACIENTE\n(.*?)\nSECCION_FIN', medico_text, re.DOTALL)
+        if info_match:
+            info_section = info_match.group(1)
+            # Extraer cada campo
+            for key in patient_info.keys():
+                pattern = rf'- {key.replace("_", " ").title()}:\s*([^\n]+)'
+                match = re.search(pattern, info_section, re.IGNORECASE)
+                if match:
+                    patient_info[key] = match.group(1).strip()
+    except Exception as e:
+        print(f"⚠️ Error extrayendo información del paciente: {e}")
+    
+    return patient_info
 
 def extract_medico_pairs_from_structured_text(medico_text):
     """Extrae pares de diagnóstico-recomendación del texto estructurado del sistema médico."""
@@ -2082,12 +2109,6 @@ class PDF(FPDF):
             deepseek_texts = []
             gemini_texts = []
             
-            # Función para truncar texto
-            def truncate_text(text, max_length):
-                if len(text) <= max_length:
-                    return text
-                return text[:max_length-3] + "..."
-            
             # Función para eliminar duplicados en una lista de pares
             def remove_duplicates_in_pairs(pairs):
                 seen_diagnoses = set()
@@ -2104,33 +2125,27 @@ class PDF(FPDF):
                         unique_pairs.append((diag, rec))
                 return unique_pairs
             
-            # Procesar médico
+            # Procesar médico - SIN TRUNCAR, mostrar texto completo
             if sources['medico']:
                 unique_medico = remove_duplicates_in_pairs(sources['medico'])
                 for diag, rec in unique_medico:
-                    diag_short = truncate_text(diag, 40)
-                    rec_short = truncate_text(rec, 50)
-                    medico_texts.append(f"• {diag_short}\n  → {rec_short}")
+                    medico_texts.append(f"• {diag}\n  → {rec}")
             else:
                 medico_texts.append("Sin diagnóstico")
             
-            # Procesar DeepSeek
+            # Procesar DeepSeek - SIN TRUNCAR, mostrar texto completo
             if sources['deepseek']:
                 unique_deepseek = remove_duplicates_in_pairs(sources['deepseek'])
                 for diag, rec in unique_deepseek:
-                    diag_short = truncate_text(diag, 40)
-                    rec_short = truncate_text(rec, 50)
-                    deepseek_texts.append(f"• {diag_short}\n  → {rec_short}")
+                    deepseek_texts.append(f"• {diag}\n  → {rec}")
             else:
                 deepseek_texts.append("Sin diagnóstico")
             
-            # Procesar Gemini
+            # Procesar Gemini - SIN TRUNCAR, mostrar texto completo
             if sources['gemini']:
                 unique_gemini = remove_duplicates_in_pairs(sources['gemini'])
                 for diag, rec in unique_gemini:
-                    diag_short = truncate_text(diag, 40)
-                    rec_short = truncate_text(rec, 50)
-                    gemini_texts.append(f"• {diag_short}\n  → {rec_short}")
+                    gemini_texts.append(f"• {diag}\n  → {rec}")
             else:
                 gemini_texts.append("Sin diagnóstico")
             
@@ -2140,6 +2155,7 @@ class PDF(FPDF):
             gemini_text = "\n\n".join(gemini_texts)
             
             # Calcular altura necesaria basada en el contenido real
+            # Calcular altura considerando que el texto puede ajustarse automáticamente
             for text in [medico_text, deepseek_text, gemini_text]:
                 if text and text.strip():
                     lines = text.split('\n')
@@ -2147,12 +2163,20 @@ class PDF(FPDF):
                     for line in lines:
                         line = line.strip()
                         if line:
+                            # Calcular cuántas líneas necesitará esta línea de texto
+                            # Considerando que el ancho de columna es col_width - 4 (margen)
+                            max_chars_per_line = int((col_width - 4) / 1.5)  # Aproximadamente 1.5mm por carácter
                             if line.startswith('• '):
-                                content_height += 3.5  # Diagnóstico
+                                # Diagnóstico: puede necesitar múltiples líneas
+                                num_lines = max(1, (len(line) // max_chars_per_line) + 1)
+                                content_height += 3.5 * num_lines
                             elif line.startswith('  → '):
-                                content_height += 3   # Recomendación
+                                # Recomendación: puede necesitar múltiples líneas
+                                num_lines = max(1, (len(line) // max_chars_per_line) + 1)
+                                content_height += 3 * num_lines
                             else:
-                                content_height += 3.5  # Texto normal
+                                num_lines = max(1, (len(line) // max_chars_per_line) + 1)
+                                content_height += 3.5 * num_lines
                         else:
                             content_height += 2  # Línea vacía
                     content_height += 4  # Margen
@@ -2160,8 +2184,8 @@ class PDF(FPDF):
                 else:
                     max_height = max(max_height, 8)  # Altura mínima para "Sin diagnóstico"
             
-            # Asegurar altura mínima y máxima
-            row_height = max(min(max_height, 25), 10)  # Entre 10 y 25mm
+            # Asegurar altura mínima, pero sin límite máximo para que quepa todo el contenido
+            row_height = max(max_height, 10)  # Mínimo 10mm, sin máximo
             
             # Imprimir las celdas de esta fila
             self._print_cell_with_wrap(col_width, row_height, medico_text, 1, 0, 'L')
@@ -2212,35 +2236,42 @@ class PDF(FPDF):
                     # Es un diagnóstico (con viñeta)
                     self.set_font('DejaVu', 'B', 7)
                     line_height = 3
-                    # Limitar longitud del diagnóstico
-                    if len(line) > 50:
-                        line = line[:47] + "..."
                 elif line.startswith('  → '):
                     # Es una recomendación (con flecha)
                     self.set_font('DejaVu', '', 6)
                     line_height = 2.5
-                    # Limitar longitud de la recomendación
-                    if len(line) > 60:
-                        line = line[:57] + "..."
                 else:
                     # Texto normal
                     self.set_font('DejaVu', '', 7)
                     line_height = 3
-                    # Limitar longitud del texto normal
-                    if len(line) > 50:
-                        line = line[:47] + "..."
+                
+                # Imprimir la línea con ajuste automático de texto (multi_cell maneja el ajuste automático)
+                # NO TRUNCAR - dejar que multi_cell ajuste el texto automáticamente
+                self.set_xy(x + 2, current_y)
+                
+                # Calcular cuántas líneas necesitará esta línea de texto
+                # Usar get_string_width para calcular el ancho del texto
+                try:
+                    text_width = self.get_string_width(line)
+                    # Calcular número de líneas necesarias
+                    num_lines = max(1, int(text_width / max_width) + 1)
+                except:
+                    # Si get_string_width no está disponible, estimar basado en longitud
+                    num_lines = max(1, (len(line) // int(max_width / 1.5)) + 1)
                 
                 # Verificar si hay espacio suficiente en la celda
-                if current_y + line_height > y + h - 2:
-                    # No hay espacio, cortar con "..."
-                    self.set_xy(x + 2, current_y)
-                    self.multi_cell(max_width, line_height, "...", 0, align)
-                    break
+                needed_height = num_lines * line_height
+                if current_y + needed_height > y + h - 2:
+                    # Si no cabe, simplemente continuar (la celda se expandirá visualmente)
+                    # No cortar el texto
+                    pass
                 
-                # Imprimir la línea con ajuste automático de texto
-                self.set_xy(x + 2, current_y)
+                # Imprimir con multi_cell que ajusta automáticamente el texto largo
+                # multi_cell ajusta el texto automáticamente en múltiples líneas si es necesario
+                y_before = self.get_y()
                 self.multi_cell(max_width, line_height, line, 0, align)
-                current_y += line_height + 0.5  # Pequeño espacio entre líneas
+                y_after = self.get_y()
+                current_y = y_after  # Actualizar posición Y después de multi_cell
         else:
             # Texto vacío
             self.set_font('DejaVu', '', 7)
@@ -2422,22 +2453,50 @@ def generate_pdf_in_memory(token, medico, deepseek, gemini, summary, comparison,
     if len(gemini) > max_text_length:
         gemini = gemini[:max_text_length] + "\n\n[Texto truncado por límite de memoria]"
 
-    # --- PÁGINA 1: ANÁLISIS DETALLADO DE DEEPSEEK ---
+    # Extraer información del paciente y diagnósticos del médico
+    patient_info = extract_patient_info_from_text(medico)
+    medico_pairs = extract_medico_pairs_from_structured_text(medico)
+    
+    # --- PÁGINA 1: INFORMACIÓN DEL PACIENTE Y DIAGNÓSTICOS DEL MÉDICO ---
+    pdf.add_page()
+    pdf.section_title('Información del Paciente')
+    
+    # Mostrar datos del paciente
+    patient_data_text = (
+        f"**Centro Médico**: {patient_info.get('centro_medico', 'N/A')}\n"
+        f"**Ciudad**: {patient_info.get('ciudad', 'N/A')}\n"
+        f"**Fecha de Examen**: {patient_info.get('fecha_examen', 'N/A')}\n"
+        f"**Puesto de Trabajo**: {patient_info.get('puesto', 'N/A')}\n"
+        f"**Tipo de Examen**: {patient_info.get('tipo_examen', 'N/A')}\n"
+        f"**Aptitud Declarada**: {patient_info.get('aptitud', 'N/A')}"
+    )
+    pdf.section_body(patient_data_text)
+    pdf.ln(10)
+    
+    # Mostrar diagnósticos del médico
+    pdf.section_title('Diagnósticos y Recomendaciones del Médico')
+    if medico_pairs:
+        diagnosticos_text = ""
+        for i, (diag, rec) in enumerate(medico_pairs, 1):
+            diagnosticos_text += f"{i}. **{diag}**\n   → {rec}\n\n"
+        pdf.section_body(diagnosticos_text)
+    else:
+        pdf.section_body("No se encontraron diagnósticos registrados por el médico.")
+    
+    # --- PÁGINA 2: ANÁLISIS DETALLADO DE DEEPSEEK ---
     pdf.add_page()
     pdf.section_title('Análisis Detallado de DeepSeek')
     pdf.section_body(deepseek)
 
-    # --- PÁGINA 2: ANÁLISIS DETALLADO DE GEMINI ---
+    # --- PÁGINA 3: ANÁLISIS DETALLADO DE GEMINI ---
     pdf.add_page()
     pdf.section_title('Análisis Detallado de Gemini')
     pdf.section_body(gemini)
 
-    # --- PÁGINA 3: TABLA COMPARATIVA DE DIAGNÓSTICOS Y RECOMENDACIONES ---
+    # --- PÁGINA 4: TABLA COMPARATIVA DE DIAGNÓSTICOS Y RECOMENDACIONES ---
     pdf.add_page(orientation='L')  # Página horizontal para mejor visualización
     
-    # Extraer pares de diagnóstico-recomendación de cada fuente
-    # Para el sistema médico, usar función específica para texto estructurado
-    medico_pairs = extract_medico_pairs_from_structured_text(medico)
+    # Los pares del médico ya fueron extraídos en la página 1
     print(f"📊 Pares extraídos del sistema médico: {len(medico_pairs)}")
     
     # Para las IAs, usar Gemini API para mayor precisión, con respaldo
@@ -2549,20 +2608,13 @@ def generate_pdf_in_memory(token, medico, deepseek, gemini, summary, comparison,
     # --- TABLA COMPARATIVA DE MÉTRICAS ---
     pdf.section_title('Tabla Comparativa de Métricas por Versión de IA')
     
-    # Crear tabla comparativa
+    # Crear tabla comparativa (sin resumen de rendimiento)
     comparison_table_text = (
         "| Métrica | DeepSeek (deepseek-chat) | Gemini (gemini-flash-latest) |\n"
         "|---------|--------------------------|----------------------------|\n"
         f"| **Similitud de Cosenos** | {sim_deepseek:.4f} ({sim_deepseek*100:.2f}%) | {sim_gemini:.4f} ({sim_gemini*100:.2f}%) |\n"
         f"| **Índice de Kappa Cohen** | {kappa_deepseek:.4f} ({kappa_deepseek*100:.2f}%) | {kappa_gemini:.4f} ({kappa_gemini*100:.2f}%) |\n"
-        f"| **Similitud de Jaccard** | {jaccard_deepseek:.4f} ({jaccard_deepseek*100:.2f}%) | {jaccard_gemini:.4f} ({jaccard_gemini*100:.2f}%) |\n\n"
-        "**Resumen de Rendimiento**:\n"
-        f"• **Mejor Similitud de Cosenos**: {'DeepSeek' if sim_deepseek > sim_gemini else 'Gemini' if sim_gemini > sim_deepseek else 'Empate'}\n"
-        f"• **Mejor Concordancia Kappa**: {'DeepSeek' if kappa_deepseek > kappa_gemini else 'Gemini' if kappa_gemini > kappa_deepseek else 'Empate'}\n"
-        f"• **Mejor Similitud Jaccard**: {'DeepSeek' if jaccard_deepseek > jaccard_gemini else 'Gemini' if jaccard_gemini > jaccard_deepseek else 'Empate'}\n\n"
-        f"**Puntuación Promedio**:\n"
-        f"• DeepSeek: {((sim_deepseek + kappa_deepseek + jaccard_deepseek) / 3):.4f}\n"
-        f"• Gemini: {((sim_gemini + kappa_gemini + jaccard_gemini) / 3):.4f}"
+        f"| **Similitud de Jaccard** | {jaccard_deepseek:.4f} ({jaccard_deepseek*100:.2f}%) | {jaccard_gemini:.4f} ({jaccard_gemini*100:.2f}%) |"
     )
     pdf.section_body(comparison_table_text, is_metric=True)
 
