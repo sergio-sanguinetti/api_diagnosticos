@@ -2049,49 +2049,94 @@ class PDF(FPDF):
             # Si no se encuentra coincidencia, usar el diagnóstico original normalizado
             return diag_clean.upper().replace(' ', '_')
         
-        # Organizar diagnósticos por categorías
+        # NUEVA LÓGICA: NO agrupar diagnósticos similares
+        # Cada fuente muestra SOLO sus propios diagnósticos, sin agrupar ni repetir
+        # Crear una lista plana de todas las filas únicas
+        
+        # Crear un diccionario para rastrear qué diagnósticos ya se han mostrado por fuente
+        all_rows = []
+        seen_medico = set()
+        seen_deepseek = set()
+        seen_gemini = set()
+        
+        # Primero, agregar todos los diagnósticos del médico como filas individuales
+        for diag, rec in medico_pairs:
+            diag_key = diag.lower().strip()
+            if diag_key not in seen_medico:
+                seen_medico.add(diag_key)
+                all_rows.append({
+                    'medico': [(diag, rec)],
+                    'deepseek': [],
+                    'gemini': []
+                })
+        
+        # Luego, agregar diagnósticos de DeepSeek
+        # SOLO agrupar si el diagnóstico es EXACTAMENTE igual (no similar)
+        for diag, rec in deepseek_pairs:
+            diag_key = diag.lower().strip()
+            # Verificar si ya existe una fila con el MISMO diagnóstico del médico (exacto, no similar)
+            found_exact = False
+            for row in all_rows:
+                if row['medico']:
+                    medico_diag_key = row['medico'][0][0].lower().strip()
+                    # Solo agrupar si es EXACTAMENTE igual (después de normalizar espacios)
+                    if diag_key == medico_diag_key:
+                        if diag_key not in seen_deepseek:
+                            seen_deepseek.add(diag_key)
+                            row['deepseek'].append((diag, rec))
+                        found_exact = True
+                        break
+            
+            # Si no es exactamente igual a ningún diagnóstico del médico, crear nueva fila
+            if not found_exact and diag_key not in seen_deepseek:
+                seen_deepseek.add(diag_key)
+                all_rows.append({
+                    'medico': [],
+                    'deepseek': [(diag, rec)],
+                    'gemini': []
+                })
+        
+        # Finalmente, agregar diagnósticos de Gemini
+        # SOLO agrupar si el diagnóstico es EXACTAMENTE igual (no similar)
+        for diag, rec in gemini_pairs:
+            diag_key = diag.lower().strip()
+            # Verificar si ya existe una fila con el MISMO diagnóstico (exacto, no similar)
+            found_exact = False
+            for row in all_rows:
+                # Verificar contra médico (exacto)
+                if row['medico']:
+                    medico_diag_key = row['medico'][0][0].lower().strip()
+                    if diag_key == medico_diag_key:
+                        if diag_key not in seen_gemini:
+                            seen_gemini.add(diag_key)
+                            row['gemini'].append((diag, rec))
+                        found_exact = True
+                        break
+                # Verificar contra DeepSeek (exacto)
+                if row['deepseek']:
+                    deepseek_diag_key = row['deepseek'][0][0].lower().strip()
+                    if diag_key == deepseek_diag_key:
+                        if diag_key not in seen_gemini:
+                            seen_gemini.add(diag_key)
+                            row['gemini'].append((diag, rec))
+                        found_exact = True
+                        break
+            
+            # Si no es exactamente igual a ningún diagnóstico anterior, crear nueva fila
+            if not found_exact and diag_key not in seen_gemini:
+                seen_gemini.add(diag_key)
+                all_rows.append({
+                    'medico': [],
+                    'deepseek': [],
+                    'gemini': [(diag, rec)]
+                })
+        
+        # Convertir a formato organized_diagnoses para compatibilidad
         organized_diagnoses = {}
-        
-        # Procesar diagnósticos del médico
-        for diag, rec in medico_pairs:
-            norm_diag = normalize_diagnosis(diag)
-            if norm_diag not in organized_diagnoses:
-                organized_diagnoses[norm_diag] = {'medico': [], 'deepseek': [], 'gemini': []}
-            organized_diagnoses[norm_diag]['medico'].append((diag, rec))
-        
-        # Procesar diagnósticos de DeepSeek
-        for diag, rec in deepseek_pairs:
-            norm_diag = normalize_diagnosis(diag)
-            if norm_diag not in organized_diagnoses:
-                organized_diagnoses[norm_diag] = {'medico': [], 'deepseek': [], 'gemini': []}
-            organized_diagnoses[norm_diag]['deepseek'].append((diag, rec))
-        
-        # Procesar diagnósticos de Gemini
-        for diag, rec in gemini_pairs:
-            norm_diag = normalize_diagnosis(diag)
-            if norm_diag not in organized_diagnoses:
-                organized_diagnoses[norm_diag] = {'medico': [], 'deepseek': [], 'gemini': []}
-            organized_diagnoses[norm_diag]['gemini'].append((diag, rec))
-        
-        # Agregar diagnósticos únicos de las IAs que no están en el sistema médico
-        # Crear un conjunto de diagnósticos del médico para comparar
-        medico_diagnoses = set()
-        for diag, rec in medico_pairs:
-            medico_diagnoses.add(normalize_diagnosis(diag))
-        
-        # Agregar diagnósticos únicos de DeepSeek
-        for diag, rec in deepseek_pairs:
-            norm_diag = normalize_diagnosis(diag)
-            if norm_diag not in medico_diagnoses and norm_diag not in organized_diagnoses:
-                organized_diagnoses[norm_diag] = {'medico': [], 'deepseek': [], 'gemini': []}
-                organized_diagnoses[norm_diag]['deepseek'].append((diag, rec))
-        
-        # Agregar diagnósticos únicos de Gemini
-        for diag, rec in gemini_pairs:
-            norm_diag = normalize_diagnosis(diag)
-            if norm_diag not in medico_diagnoses and norm_diag not in organized_diagnoses:
-                organized_diagnoses[norm_diag] = {'medico': [], 'deepseek': [], 'gemini': []}
-                organized_diagnoses[norm_diag]['gemini'].append((diag, rec))
+        for i, row in enumerate(all_rows):
+            # Usar un identificador único para cada fila
+            row_id = f"ROW_{i}"
+            organized_diagnoses[row_id] = row
         
         # Si no hay diagnósticos organizados, mostrar mensaje
         if not organized_diagnoses:
@@ -2099,8 +2144,8 @@ class PDF(FPDF):
             self.ln(base_row_height * 2)
             return
         
-        # Imprimir tabla organizada
-        for norm_diag, sources in organized_diagnoses.items():
+        # Imprimir tabla organizada - cada fila muestra solo lo que cada fuente realmente dijo
+        for row_id, sources in organized_diagnoses.items():
             # Calcular altura máxima para esta fila
             max_height = 0
             
@@ -2528,95 +2573,15 @@ def generate_pdf_in_memory(token, medico, deepseek, gemini, summary, comparison,
         for i, (diag, rec) in enumerate(gemini_pairs[:3]):  # Mostrar solo los primeros 3
             print(f"  Gemini {i+1}: {diag[:30]}... -> {rec[:30]}...")
     
-    # Aplicar mejora de concordancia y generación completa
-    print("🔧 Aplicando mejora de concordancia...")
-    deepseek_pairs = improve_diagnosis_concordance(medico_pairs, deepseek_pairs, "DeepSeek")
-    gemini_pairs = improve_diagnosis_concordance(medico_pairs, gemini_pairs, "Gemini")
-    
-    print("🔧 Asegurando generación completa de diagnósticos...")
-    deepseek_pairs = ensure_complete_diagnosis_generation(medico_pairs, deepseek_pairs, "DeepSeek")
-    gemini_pairs = ensure_complete_diagnosis_generation(medico_pairs, gemini_pairs, "Gemini")
+    # NO aplicar mejora de concordancia ni generación completa
+    # Cada IA debe mostrar SOLO lo que realmente dijo, sin generar diagnósticos basados en el médico
+    # Esto evita que se "repita" lo del médico en las columnas de las IAs
+    print("ℹ️ Mostrando diagnósticos originales de cada IA sin modificaciones")
     
     # Crear la tabla comparativa unificada y obtener métricas consistentes
     consistent_metrics = pdf.print_diagnosis_recommendation_comparison_table(medico_pairs, deepseek_pairs, gemini_pairs)
     
-    # Usar métricas consistentes si están disponibles, sino usar las originales
-    if consistent_metrics:
-        print("✅ Usando métricas consistentes calculadas desde los pares")
-        metrics = consistent_metrics
-    else:
-        print("⚠️ Usando métricas originales (fallback)")
-
-    # --- PÁGINA 4: MÉTRICAS DE SIMILITUD Y CONCORDANCIA ---
-    pdf.add_page()
-    pdf.section_title('Métricas de Similitud y Concordancia')
-
-    # Contenido explicativo
-    explanation = (
-        "Esta sección presenta diversas métricas para evaluar la concordancia entre el análisis del médico "
-        "y los análisis generados por cada IA. Las métricas incluyen:\n\n"
-        "• **Similitud Semántica (Cosenos)**: Mide la concordancia en el significado usando vectores de texto\n"
-        "• **Índice de Kappa Cohen**: Evalúa la concordancia entre evaluadores (médico vs IA)\n"
-        "• **Similitud de Jaccard**: Compara la similitud de conjuntos de términos médicos\n\n"
-        "Un puntaje más cercano a 1.0 indica una mayor concordancia."
-    )
-    pdf.section_body(explanation)
-    pdf.ln(10)
-
-    # --- SECCIÓN DEEPSEEK ---
-    pdf.section_title('Métricas de DeepSeek (deepseek-chat)')
-    
-    # Obtener métricas de DeepSeek
-    sim_deepseek = metrics.get('deepseek_similarity', 0.0)
-    kappa_deepseek = metrics.get('deepseek_kappa', 0.0)
-    jaccard_deepseek = metrics.get('deepseek_jaccard', 0.0)
-    
-    # Crear tabla de métricas para DeepSeek
-    deepseek_metrics_text = (
-        f"**Similitud de Cosenos**: {sim_deepseek:.4f} ({sim_deepseek*100:.2f}%)\n"
-        f"**Índice de Kappa Cohen**: {kappa_deepseek:.4f} ({kappa_deepseek*100:.2f}%)\n"
-        f"**Similitud de Jaccard**: {jaccard_deepseek:.4f} ({jaccard_deepseek*100:.2f}%)\n\n"
-        f"**Interpretación**:\n"
-        f"• Similitud de Cosenos: {'Excelente' if sim_deepseek >= 0.8 else 'Buena' if sim_deepseek >= 0.6 else 'Moderada' if sim_deepseek >= 0.4 else 'Baja'}\n"
-        f"• Concordancia Kappa: {'Excelente' if kappa_deepseek >= 0.8 else 'Buena' if kappa_deepseek >= 0.6 else 'Moderada' if kappa_deepseek >= 0.4 else 'Baja'}\n"
-        f"• Similitud Jaccard: {'Excelente' if jaccard_deepseek >= 0.8 else 'Buena' if jaccard_deepseek >= 0.6 else 'Moderada' if jaccard_deepseek >= 0.4 else 'Baja'}"
-    )
-    pdf.section_body(deepseek_metrics_text, is_metric=True)
-    pdf.ln(10)
-
-    # --- SECCIÓN GEMINI ---
-    pdf.section_title('Métricas de Gemini (gemini-flash-latest)')
-    
-    # Obtener métricas de Gemini
-    sim_gemini = metrics.get('gemini_similarity', 0.0)
-    kappa_gemini = metrics.get('gemini_kappa', 0.0)
-    jaccard_gemini = metrics.get('gemini_jaccard', 0.0)
-    
-    # Crear tabla de métricas para Gemini
-    gemini_metrics_text = (
-        f"**Similitud de Cosenos**: {sim_gemini:.4f} ({sim_gemini*100:.2f}%)\n"
-        f"**Índice de Kappa Cohen**: {kappa_gemini:.4f} ({kappa_gemini*100:.2f}%)\n"
-        f"**Similitud de Jaccard**: {jaccard_gemini:.4f} ({jaccard_gemini*100:.2f}%)\n\n"
-        f"**Interpretación**:\n"
-        f"• Similitud de Cosenos: {'Excelente' if sim_gemini >= 0.8 else 'Buena' if sim_gemini >= 0.6 else 'Moderada' if sim_gemini >= 0.4 else 'Baja'}\n"
-        f"• Concordancia Kappa: {'Excelente' if kappa_gemini >= 0.8 else 'Buena' if kappa_gemini >= 0.6 else 'Moderada' if kappa_gemini >= 0.4 else 'Baja'}\n"
-        f"• Similitud Jaccard: {'Excelente' if jaccard_gemini >= 0.8 else 'Buena' if jaccard_gemini >= 0.6 else 'Moderada' if jaccard_gemini >= 0.4 else 'Baja'}"
-    )
-    pdf.section_body(gemini_metrics_text, is_metric=True)
-    pdf.ln(10)
-
-    # --- TABLA COMPARATIVA DE MÉTRICAS ---
-    pdf.section_title('Tabla Comparativa de Métricas por Versión de IA')
-    
-    # Crear tabla comparativa (sin resumen de rendimiento)
-    comparison_table_text = (
-        "| Métrica | DeepSeek (deepseek-chat) | Gemini (gemini-flash-latest) |\n"
-        "|---------|--------------------------|----------------------------|\n"
-        f"| **Similitud de Cosenos** | {sim_deepseek:.4f} ({sim_deepseek*100:.2f}%) | {sim_gemini:.4f} ({sim_gemini*100:.2f}%) |\n"
-        f"| **Índice de Kappa Cohen** | {kappa_deepseek:.4f} ({kappa_deepseek*100:.2f}%) | {kappa_gemini:.4f} ({kappa_gemini*100:.2f}%) |\n"
-        f"| **Similitud de Jaccard** | {jaccard_deepseek:.4f} ({jaccard_deepseek*100:.2f}%) | {jaccard_gemini:.4f} ({jaccard_gemini*100:.2f}%) |"
-    )
-    pdf.section_body(comparison_table_text, is_metric=True)
+    # Las métricas se calculan pero no se muestran en el PDF (se eliminó la sección de métricas)
 
     return pdf.output()
 
