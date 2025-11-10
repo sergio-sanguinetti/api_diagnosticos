@@ -953,6 +953,7 @@ def extract_diagnosis_recommendation_pairs_with_gemini(text, source_name, api_ke
         # Aplicar filtros y deduplicación
         pairs = filter_ophthalmology_diagnoses(pairs)
         pairs = filter_administrative_diagnoses(pairs)
+        pairs = filter_generic_placeholder_pairs(pairs)  # Filtrar placeholders genéricos
         pairs = deduplicate_similar_diagnoses(pairs)
         
         print(f"📊 Total de pares extraídos de {source_name}: {len(pairs)}")
@@ -1114,6 +1115,7 @@ def extract_medico_pairs_from_structured_text(medico_text):
         # Aplicar filtros y deduplicación
         pairs = filter_ophthalmology_diagnoses(pairs)
         pairs = filter_administrative_diagnoses(pairs)
+        pairs = filter_generic_placeholder_pairs(pairs)  # Filtrar placeholders genéricos
         pairs = deduplicate_similar_diagnoses(pairs)
         
         print(f"📊 Total de pares válidos extraídos: {len(pairs)}")
@@ -1277,6 +1279,7 @@ def extract_fallback_pairs_from_text(text, source_name):
         # Aplicar filtros y deduplicación
         pairs = filter_ophthalmology_diagnoses(pairs)
         pairs = filter_administrative_diagnoses(pairs)
+        pairs = filter_generic_placeholder_pairs(pairs)  # Filtrar placeholders genéricos
         pairs = deduplicate_similar_diagnoses(pairs)
         
         print(f"📊 Total de pares de respaldo para {source_name}: {len(pairs)}")
@@ -1777,6 +1780,48 @@ def filter_administrative_diagnoses(pairs):
     
     return filtered_pairs
 
+def filter_generic_placeholder_pairs(pairs):
+    """Filtra pares genéricos como 'Diagnóstico -> Recomendación' que son placeholders."""
+    filtered_pairs = []
+    generic_patterns = [
+        r'^diagnóstico\s*$',
+        r'^diagnostico\s*$',
+        r'^recomendación\s*$',
+        r'^recomendacion\s*$',
+        r'^diagnóstico\s*->\s*recomendación\s*$',
+        r'^diagnostico\s*->\s*recomendacion\s*$',
+        r'^diagnóstico:\s*recomendación\s*$',
+        r'^diagnostico:\s*recomendacion\s*$',
+    ]
+    
+    for diagnosis, recommendation in pairs:
+        diag_lower = diagnosis.lower().strip()
+        rec_lower = recommendation.lower().strip()
+        
+        # Verificar si es un placeholder genérico
+        is_generic = False
+        
+        # Verificar patrones genéricos en diagnóstico o recomendación
+        for pattern in generic_patterns:
+            if re.match(pattern, diag_lower) or re.match(pattern, rec_lower):
+                is_generic = True
+                break
+        
+        # Verificar si diagnóstico o recomendación son muy genéricos o vacíos
+        if (diag_lower in ['diagnóstico', 'diagnostico', 'diagnosis', ''] or 
+            rec_lower in ['recomendación', 'recomendacion', 'recommendation', ''] or
+            (len(diag_lower) < 5 and len(rec_lower) < 5) or
+            (diag_lower == 'diagnóstico' and rec_lower == 'recomendación') or
+            (diag_lower == 'diagnostico' and rec_lower == 'recomendacion')):
+            is_generic = True
+        
+        if not is_generic:
+            filtered_pairs.append((diagnosis, recommendation))
+        else:
+            print(f"🚫 Filtrado par genérico/placeholder: {diagnosis[:30]}... -> {recommendation[:30]}...")
+    
+    return filtered_pairs
+
 def extract_ai_pairs_from_medico_data(medico_pairs, source_name):
     """Extrae pares para las IAs basándose en los datos del sistema médico cuando las APIs fallan."""
     try:
@@ -1848,6 +1893,7 @@ def extract_ai_pairs_from_medico_data(medico_pairs, source_name):
         # Aplicar filtros y deduplicación
         ai_pairs = filter_ophthalmology_diagnoses(ai_pairs)
         ai_pairs = filter_administrative_diagnoses(ai_pairs)
+        ai_pairs = filter_generic_placeholder_pairs(ai_pairs)  # Filtrar placeholders genéricos
         ai_pairs = deduplicate_similar_diagnoses(ai_pairs)
         
         print(f"📊 Total de pares generados para {source_name}: {len(ai_pairs)}")
@@ -2170,27 +2216,49 @@ class PDF(FPDF):
                         unique_pairs.append((diag, rec))
                 return unique_pairs
             
-            # Procesar médico - SIN TRUNCAR, mostrar texto completo
+            # Función para verificar si un par es genérico/placeholder
+            def is_generic_placeholder(diag, rec):
+                diag_lower = diag.lower().strip()
+                rec_lower = rec.lower().strip()
+                # Verificar si es un placeholder genérico
+                if (diag_lower in ['diagnóstico', 'diagnostico', 'diagnosis', ''] or 
+                    rec_lower in ['recomendación', 'recomendacion', 'recommendation', ''] or
+                    (diag_lower == 'diagnóstico' and rec_lower == 'recomendación') or
+                    (diag_lower == 'diagnostico' and rec_lower == 'recomendacion') or
+                    (len(diag_lower) < 5 and len(rec_lower) < 5)):
+                    return True
+                return False
+            
+            # Procesar médico - SIN TRUNCAR, mostrar texto completo, filtrar placeholders
             if sources['medico']:
                 unique_medico = remove_duplicates_in_pairs(sources['medico'])
                 for diag, rec in unique_medico:
-                    medico_texts.append(f"• {diag}\n  → {rec}")
+                    if not is_generic_placeholder(diag, rec):
+                        medico_texts.append(f"• {diag}\n  → {rec}")
+                if not medico_texts:  # Si todos fueron filtrados
+                    medico_texts.append("Sin diagnóstico")
             else:
                 medico_texts.append("Sin diagnóstico")
             
-            # Procesar DeepSeek - SIN TRUNCAR, mostrar texto completo
+            # Procesar DeepSeek - SIN TRUNCAR, mostrar texto completo, filtrar placeholders
             if sources['deepseek']:
                 unique_deepseek = remove_duplicates_in_pairs(sources['deepseek'])
                 for diag, rec in unique_deepseek:
-                    deepseek_texts.append(f"• {diag}\n  → {rec}")
+                    if not is_generic_placeholder(diag, rec):
+                        deepseek_texts.append(f"• {diag}\n  → {rec}")
+                if not deepseek_texts:  # Si todos fueron filtrados
+                    deepseek_texts.append("Sin diagnóstico")
             else:
                 deepseek_texts.append("Sin diagnóstico")
             
-            # Procesar Gemini - SIN TRUNCAR, mostrar texto completo
+            # Procesar Gemini - SIN TRUNCAR, mostrar texto completo, filtrar placeholders
             if sources['gemini']:
                 unique_gemini = remove_duplicates_in_pairs(sources['gemini'])
                 for diag, rec in unique_gemini:
-                    gemini_texts.append(f"• {diag}\n  → {rec}")
+                    if not is_generic_placeholder(diag, rec):
+                        gemini_texts.append(f"• {diag}\n  → {rec}")
+                if not gemini_texts:  # Si todos fueron filtrados
+                    gemini_texts.append("Sin diagnóstico")
             else:
                 gemini_texts.append("Sin diagnóstico")
             
