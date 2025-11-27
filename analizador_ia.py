@@ -93,6 +93,28 @@ def health_check():
         "timestamp": __import__('datetime').datetime.now().isoformat()
     })
 
+@app.route('/ping', methods=['GET'])
+def ping():
+    """Endpoint simple para mantener el servidor activo en Render (versión gratuita)."""
+    from datetime import datetime
+    return jsonify({
+        "status": "ok",
+        "message": "Servidor activo",
+        "timestamp": datetime.now().isoformat(),
+        "server": "running"
+    }), 200
+
+@app.route('/keep-alive', methods=['GET'])
+def keep_alive():
+    """Endpoint alternativo para mantener el servidor activo. Devuelve estado de carga."""
+    from datetime import datetime
+    return jsonify({
+        "status": "active",
+        "message": "Servidor en ejecución",
+        "uptime": "running",
+        "timestamp": datetime.now().isoformat()
+    }), 200
+
 @app.route('/analizar', methods=['POST'])
 def analizar_endpoint():
     """ENDPOINT ORIGINAL: Analiza datos de un formulario."""
