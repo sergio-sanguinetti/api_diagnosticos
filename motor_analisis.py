@@ -64,7 +64,16 @@ def get_patient_results(connection, token_resultado):
 
         # --- LÓGICA PARA AGRUPAR DIAGNÓSTICOS POR TIPO DE EXAMEN ---
         try:
-            diagnosticos_json = json.loads(result.get('diagnosticos', '[]'))
+            diagnosticos_raw = result.get('diagnosticos', '[]')
+            print(f"🔍 Diagnósticos raw de BD: {diagnosticos_raw[:200] if diagnosticos_raw else 'VACÍO'}...")
+            
+            # Si está vacío o es None, usar lista vacía
+            if not diagnosticos_raw or diagnosticos_raw.strip() == '':
+                diagnosticos_json = []
+            else:
+                diagnosticos_json = json.loads(diagnosticos_raw)
+            
+            print(f"📊 Número de diagnósticos parseados: {len(diagnosticos_json) if isinstance(diagnosticos_json, list) else 0}")
             
             exam_groups = {
                 "Perfil Lipídico": [],
@@ -75,10 +84,20 @@ def get_patient_results(connection, token_resultado):
             }
 
             for item in diagnosticos_json:
-                diag_text = item.get('diagnostico', '').lower()
-                diag_info = f"- Diagnóstico: {item.get('diagnostico', 'N/A')}\n  Recomendación: {item.get('recomendacion', 'N/A')}"
+                if not isinstance(item, dict):
+                    continue
+                    
+                diagnostico = item.get('diagnostico', '').strip()
+                recomendacion = item.get('recomendacion', '').strip()
                 
-                if any(keyword in diag_text for keyword in ['trigliceridemia', 'colesterol', 'lipídico']):
+                # Validar que el diagnóstico no esté vacío
+                if not diagnostico or diagnostico == 'N/A':
+                    continue
+                
+                diag_text = diagnostico.lower()
+                diag_info = f"- Diagnóstico: {diagnostico}\n  Recomendación: {recomendacion if recomendacion and recomendacion != 'N/A' else 'Evaluación médica y seguimiento recomendado'}"
+                
+                if any(keyword in diag_text for keyword in ['trigliceridemia', 'colesterol', 'lipídico', 'dislipidemia']):
                     exam_groups["Perfil Lipídico"].append(diag_info)
                 elif any(keyword in diag_text for keyword in ['orina', 'hematies', 'microhematuria']):
                     exam_groups["Examen de Orina"].append(diag_info)
@@ -94,9 +113,17 @@ def get_patient_results(connection, token_resultado):
                 if diagnoses:
                     diagnosticos_formateados += f"\n**{group_name}**\n"
                     diagnosticos_formateados += "\n\n".join(diagnoses) + "\n"
+            
+            if not diagnosticos_formateados.strip():
+                diagnosticos_formateados = "No se encontraron diagnósticos registrados en el sistema."
+                print("⚠️ No se encontraron diagnósticos válidos en la base de datos")
 
-        except json.JSONDecodeError:
-            diagnosticos_formateados = result.get('diagnosticos', 'Datos de diagnóstico no válidos.')
+        except json.JSONDecodeError as e:
+            print(f"❌ Error parseando JSON de diagnósticos: {e}")
+            diagnosticos_formateados = "Datos de diagnóstico no válidos o formato incorrecto."
+        except Exception as e:
+            print(f"❌ Error procesando diagnósticos: {e}")
+            diagnosticos_formateados = "Error al procesar los diagnósticos del sistema."
 
         # Extraemos solo los resultados anormales para el resumen
         hallazgos_clave = []
@@ -1076,19 +1103,37 @@ def extract_medico_pairs_from_structured_text(medico_text):
         
         diagnosticos_section = diagnosticos_match.group(1).strip()
         print(f"📋 Sección de diagnósticos encontrada: {len(diagnosticos_section)} caracteres")
+        print(f"📋 Contenido (primeros 500 caracteres): {diagnosticos_section[:500]}")
         pairs = []
         
-        # Buscar patrones de "Diagnóstico: X\n  Recomendación: Y"
-        pattern = r'- Diagnóstico:\s*([^\n]+)\n\s*Recomendación:\s*([^\n]+)'
-        matches = re.findall(pattern, diagnosticos_section)
-        print(f"🔍 Patrones encontrados con regex: {len(matches)}")
+        # Limpiar el texto: eliminar títulos de grupo (**Perfil Lipídico**, etc.)
+        cleaned_section = re.sub(r'\*\*[^*]+\*\*', '', diagnosticos_section)
+        cleaned_section = re.sub(r'\n{3,}', '\n\n', cleaned_section)  # Normalizar múltiples saltos de línea
         
+        # Buscar patrones de "Diagnóstico: X\n  Recomendación: Y" con patrón más flexible
+        # Patrón mejorado que maneja espacios variables y múltiples formatos
+        pattern = r'- Diagnóstico:\s*([^\n]+?)(?:\n\s+Recomendación:\s*([^\n]+))?'
+        matches = re.finditer(pattern, cleaned_section, re.MULTILINE)
+        
+        match_count = 0
         for match in matches:
-            diagnosis = match[0].strip()
-            recommendation = match[1].strip()
-            if len(diagnosis) > 3 and len(recommendation) > 3:
+            diagnosis = match.group(1).strip() if match.group(1) else ""
+            recommendation = match.group(2).strip() if match.group(2) else ""
+            
+            # Limpiar espacios múltiples
+            diagnosis = re.sub(r'\s+', ' ', diagnosis).strip()
+            recommendation = re.sub(r'\s+', ' ', recommendation).strip()
+            
+            # Validar que no sean valores por defecto o vacíos
+            if diagnosis and diagnosis != 'N/A' and len(diagnosis) > 3:
+                if not recommendation or recommendation == 'N/A' or len(recommendation) < 3:
+                    recommendation = "Evaluación médica y seguimiento recomendado"
+                
                 pairs.append((diagnosis, recommendation))
-                print(f"✅ Par extraído: {diagnosis[:30]}... -> {recommendation[:30]}...")
+                match_count += 1
+                print(f"✅ Par extraído: {diagnosis[:50]}... -> {recommendation[:50]}...")
+        
+        print(f"🔍 Patrones encontrados con regex mejorado: {match_count}")
         
         # Si no se encontraron pares con el patrón principal, intentar otros patrones
         if not pairs:
@@ -1096,16 +1141,18 @@ def extract_medico_pairs_from_structured_text(medico_text):
             
             # Patrón alternativo 1: Solo diagnósticos sin recomendaciones explícitas
             alt_pattern1 = r'- Diagnóstico:\s*([^\n]+)'
-            alt_matches1 = re.findall(alt_pattern1, diagnosticos_section)
+            alt_matches1 = re.findall(alt_pattern1, cleaned_section)
             print(f"🔍 Diagnósticos encontrados sin recomendaciones: {len(alt_matches1)}")
             
             for diag in alt_matches1:
                 diagnosis = diag.strip()
-                if len(diagnosis) > 3:
+                # Limpiar espacios múltiples
+                diagnosis = re.sub(r'\s+', ' ', diagnosis).strip()
+                if diagnosis and diagnosis != 'N/A' and len(diagnosis) > 3:
                     # Crear una recomendación genérica
                     recommendation = "Evaluación médica y seguimiento recomendado"
                     pairs.append((diagnosis, recommendation))
-                    print(f"✅ Par con recomendación genérica: {diagnosis[:30]}... -> {recommendation}")
+                    print(f"✅ Par con recomendación genérica: {diagnosis[:50]}... -> {recommendation}")
             
             # Patrón alternativo 2: Buscar en el texto completo del reporte
             if not pairs:
