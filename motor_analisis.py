@@ -113,7 +113,7 @@ def get_patient_results(connection, token_resultado):
 **Información del Paciente y Examen:**
 - Centro Médico: {result.get('centro_medico', 'N/A')}
 - Ciudad: {result.get('ciudad', 'N/A')}
-- Fecha de Examen: {result.get('fecha_examen')}
+- Fecha de Examen: {result.get('fecha_examen', 'N/A')}
 - Puesto de Trabajo: {result.get('puesto', 'N/A')}
 - Tipo de Examen: {result.get('tipo_examen', 'N/A')}
 - Aptitud Declarada: {result.get('aptitud', 'N/A')}
@@ -140,7 +140,7 @@ def get_patient_results(connection, token_resultado):
 SECCION_INFO_PACIENTE
 - Centro Médico: {result.get('centro_medico', 'N/A')}
 - Ciudad: {result.get('ciudad', 'N/A')}
-- Fecha de Examen: {result.get('fecha_examen')}
+- Fecha de Examen: {result.get('fecha_examen', 'N/A')}
 - Puesto de Trabajo: {result.get('puesto', 'N/A')}
 - Tipo de Examen: {result.get('tipo_examen', 'N/A')}
 - Aptitud Declarada: {result.get('aptitud', 'N/A')}
@@ -1036,17 +1036,30 @@ def extract_patient_info_from_text(medico_text):
         'aptitud': 'N/A'
     }
     
+    # Mapeo directo entre claves y los nombres exactos que aparecen en el texto
+    field_mapping = {
+        'centro_medico': r'Centro Médico',
+        'ciudad': r'Ciudad',
+        'fecha_examen': r'Fecha de Examen',
+        'puesto': r'Puesto de Trabajo',
+        'tipo_examen': r'Tipo de Examen',
+        'aptitud': r'Aptitud Declarada'
+    }
+    
     try:
         # Buscar la sección de información del paciente
         info_match = re.search(r'SECCION_INFO_PACIENTE\n(.*?)\nSECCION_FIN', medico_text, re.DOTALL)
         if info_match:
             info_section = info_match.group(1)
-            # Extraer cada campo
-            for key in patient_info.keys():
-                pattern = rf'- {key.replace("_", " ").title()}:\s*([^\n]+)'
+            # Extraer cada campo usando el mapeo exacto
+            for key, field_name in field_mapping.items():
+                pattern = rf'- {re.escape(field_name)}:\s*([^\n]+)'
                 match = re.search(pattern, info_section, re.IGNORECASE)
                 if match:
-                    patient_info[key] = match.group(1).strip()
+                    value = match.group(1).strip()
+                    # Solo actualizar si el valor no está vacío y no es None
+                    if value and value != 'None' and value != '':
+                        patient_info[key] = value
     except Exception as e:
         print(f"⚠️ Error extrayendo información del paciente: {e}")
     
@@ -2560,7 +2573,7 @@ def generate_pdf_in_memory(token, medico, deepseek, gemini, summary, comparison,
     pdf.alias_nb_pages()
     
     # Limitar el tamaño de los textos para evitar problemas de memoria
-    max_text_length = 5000
+    max_text_length = 10000
     if len(deepseek) > max_text_length:
         deepseek = deepseek[:max_text_length] + "\n\n[Texto truncado por límite de memoria]"
     if len(gemini) > max_text_length:
