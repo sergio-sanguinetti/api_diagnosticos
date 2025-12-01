@@ -2456,6 +2456,94 @@ class PDF(FPDF):
         else:
             self.set_xy(x + w, y)
 
+    def print_metrics_page(self, metrics):
+        """Muestra las métricas de similitud (Cohen Kappa, Jaccard, Cosenos) en una nueva página."""
+        self.add_page()
+        self.section_title('Métricas de Similitud y Concordancia')
+        
+        # Explicación de las métricas
+        explanation = (
+            "Las siguientes métricas evalúan la concordancia entre los diagnósticos del sistema médico "
+            "y los generados por las IAs (DeepSeek y Gemini):\n\n"
+            "• Índice de Kappa Cohen: Mide la concordancia entre evaluadores (0 = sin concordancia, 1 = concordancia perfecta)\n"
+            "• Similitud de Jaccard: Compara la similitud de conjuntos de términos médicos (0 = sin similitud, 1 = idénticos)\n"
+            "• Similitud de Cosenos: Mide concordancia semántica usando vectores de texto (0 = sin similitud, 1 = idénticos)"
+        )
+        self.section_body(explanation)
+        self.ln(10)
+        
+        # Tabla de métricas
+        col_width = (self.w - self.l_margin - self.r_margin) / 4
+        row_height = 8
+        
+        # Encabezados
+        self.set_font('DejaVu', 'B', 10)
+        self.set_fill_color(240, 240, 240)
+        self.set_text_color(0, 0, 0)
+        
+        self.cell(col_width, row_height, 'Métrica', 1, 0, 'C', fill=True)
+        self.cell(col_width, row_height, 'DeepSeek', 1, 0, 'C', fill=True)
+        self.cell(col_width, row_height, 'Gemini', 1, 0, 'C', fill=True)
+        self.cell(col_width, row_height, 'Mejor', 1, 1, 'C', fill=True)
+        
+        # Datos de las métricas
+        self.set_font('DejaVu', '', 10)
+        self.set_fill_color(255, 255, 255)
+        
+        # Kappa Cohen
+        deepseek_kappa = metrics.get('deepseek_kappa', 0.0)
+        gemini_kappa = metrics.get('gemini_kappa', 0.0)
+        mejor_kappa = "DeepSeek" if deepseek_kappa > gemini_kappa else "Gemini" if gemini_kappa > deepseek_kappa else "Empate"
+        
+        self.cell(col_width, row_height, 'Kappa Cohen', 1, 0, 'L', fill=True)
+        self.cell(col_width, row_height, f'{deepseek_kappa:.4f}', 1, 0, 'C', fill=True)
+        self.cell(col_width, row_height, f'{gemini_kappa:.4f}', 1, 0, 'C', fill=True)
+        self.cell(col_width, row_height, mejor_kappa, 1, 1, 'C', fill=True)
+        
+        # Jaccard
+        deepseek_jaccard = metrics.get('deepseek_jaccard', 0.0)
+        gemini_jaccard = metrics.get('gemini_jaccard', 0.0)
+        mejor_jaccard = "DeepSeek" if deepseek_jaccard > gemini_jaccard else "Gemini" if gemini_jaccard > deepseek_jaccard else "Empate"
+        
+        self.cell(col_width, row_height, 'Jaccard', 1, 0, 'L', fill=True)
+        self.cell(col_width, row_height, f'{deepseek_jaccard:.4f}', 1, 0, 'C', fill=True)
+        self.cell(col_width, row_height, f'{gemini_jaccard:.4f}', 1, 0, 'C', fill=True)
+        self.cell(col_width, row_height, mejor_jaccard, 1, 1, 'C', fill=True)
+        
+        # Cosenos (Similitud Semántica)
+        deepseek_similarity = metrics.get('deepseek_similarity', 0.0)
+        gemini_similarity = metrics.get('gemini_similarity', 0.0)
+        mejor_similarity = "DeepSeek" if deepseek_similarity > gemini_similarity else "Gemini" if gemini_similarity > deepseek_similarity else "Empate"
+        
+        self.cell(col_width, row_height, 'Cosenos', 1, 0, 'L', fill=True)
+        self.cell(col_width, row_height, f'{deepseek_similarity:.4f}', 1, 0, 'C', fill=True)
+        self.cell(col_width, row_height, f'{gemini_similarity:.4f}', 1, 0, 'C', fill=True)
+        self.cell(col_width, row_height, mejor_similarity, 1, 1, 'C', fill=True)
+        
+        self.ln(10)
+        
+        # Resumen de rendimiento
+        self.section_title('Resumen de Rendimiento')
+        
+        # Calcular promedios
+        promedio_deepseek = (deepseek_kappa + deepseek_jaccard + deepseek_similarity) / 3
+        promedio_gemini = (gemini_kappa + gemini_jaccard + gemini_similarity) / 3
+        
+        summary_text = (
+            f"**Promedio General:**\n"
+            f"• DeepSeek: {promedio_deepseek:.4f}\n"
+            f"• Gemini: {promedio_gemini:.4f}\n\n"
+        )
+        
+        if promedio_deepseek > promedio_gemini:
+            summary_text += f"**Mejor Modelo General:** DeepSeek (diferencia: {promedio_deepseek - promedio_gemini:.4f})"
+        elif promedio_gemini > promedio_deepseek:
+            summary_text += f"**Mejor Modelo General:** Gemini (diferencia: {promedio_gemini - promedio_deepseek:.4f})"
+        else:
+            summary_text += "**Mejor Modelo General:** Empate"
+        
+        self.section_body(summary_text)
+
 def adjust_metrics_display(metrics):
     """Ajusta la visualización de las métricas al rango 80-90% manteniendo las diferencias relativas."""
     try:
@@ -2709,7 +2797,9 @@ def generate_pdf_in_memory(token, medico, deepseek, gemini, summary, comparison,
     # Crear la tabla comparativa unificada y obtener métricas consistentes
     consistent_metrics = pdf.print_diagnosis_recommendation_comparison_table(medico_pairs, deepseek_pairs, gemini_pairs)
     
-    # Las métricas se calculan pero no se muestran en el PDF (se eliminó la sección de métricas)
+    # Mostrar métricas en una nueva página
+    if consistent_metrics:
+        pdf.print_metrics_page(consistent_metrics)
 
     return pdf.output()
 
